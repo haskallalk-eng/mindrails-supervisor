@@ -2,7 +2,7 @@
 
 CLI or stdio MCP → schema validation → deterministic host-check/evidence veto → process attempt/input budget → decision provider → validated signals → policy → advisory result.
 
-The provider is replaceable through the narrow DecisionProvider interface. The mock implementation reads synthetic markers. Jev evaluates one question per requirement plus task fulfillment, evidence sufficiency and contradictions in one request. Internal question keys are independent of user IDs. Requests cannot redirect credentials and have no configurable endpoint. No SDK retry layer is used.
+The provider is replaceable through the narrow DecisionProvider interface. The mock implementation reads synthetic markers. Jev evaluates one question per requirement plus task fulfillment, evidence sufficiency and contradictions in one request. Internal question keys are independent of user IDs. Requests cannot redirect credentials: the selected route maps only to the fixed native TypeSafe endpoint or the fixed Vercel TypeSafe-compatible endpoint. No arbitrary base URL and no SDK retry layer are provided.
 
 Completion policy version 0.1.1 evaluates each requirement separately; it does not average failures away. Transport errors, invalid responses and exhausted budgets produce review. Aborts terminate fetch; an injected provider which ignores AbortSignal may continue background work, so implementers must honor cancellation.
 

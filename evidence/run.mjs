@@ -1,4 +1,5 @@
-import { Supervisor, detectStuck, SafeError } from '../dist/core.js';
+import { readFileSync } from 'node:fs';
+import { Supervisor, detectStuck } from '../dist/core.js';
 
 const step=(action='build',result='same error',progress=false)=>({action,input:'same task',result,progress});
 const a=step(),b=step('search','same advice'),c=step('edit','same patch'),d=step('test','same failure');
@@ -42,6 +43,7 @@ for(const fixture of policyCases){
   policyRows.push({id:fixture.id,expected:fixture.expected,selfReport,hostChecks,supervisor:actual});
 }
 const accuracy=key=>policyRows.filter(row=>row[key]===row.expected).length;
+const liveGateway=JSON.parse(readFileSync(new URL('./results/jev-live-vercel-2026-09-23.json',import.meta.url),'utf8'));
 const report={
   generatedAt:new Date().toISOString(),
   scope:'Reproducible implementation and deterministic-policy evidence. Hand-labeled fixtures; not real traffic, Jev accuracy, calibration, latency, cost savings, or business impact.',
@@ -50,6 +52,6 @@ const report={
     {id:'poll-five-exhausts-two-cycle-grace',decision:detectStuck({steps:Array(5).fill(step('poll','running')),allowedExtraRepetitions:2}).decision},
   ],rows:traceRows,limits:['The before/after confusion matrices use the same unchanged inputs; default v0.2 still flags identical polling and health traces.','Cycles longer than three steps remain outside scope.','Timestamp or otherwise changing result strings are not normalized.','Repeat allowance is a separate caller-declared grace of at most two extra cycles; it does not prove polling is legitimate.']},
   completionPolicy:{baselines:{selfReport:'Always accept the agent completion claim.',hostChecks:'Review declared fail/unknown checks; otherwise finish. No semantic signals.'},correctOfSix:{selfReport:accuracy('selfReport'),hostChecks:accuracy('hostChecks'),supervisor:accuracy('supervisor')},rows:policyRows,limits:['Signals are fixed fixtures, not Jev outputs. This isolates policy composition only.','Host check statuses and evidence remain caller supplied and unauthenticated.']},
-  semanticModelEffect:{status:'not_run',reason:'No dedicated product TypeSafe key is available in the current environment.'},
+  semanticModelEffect:{status:'run_once',nativeTypeSafeStatus:'not_run_registration_unavailable',route:liveGateway.route,model:liveGateway.model,fixtureHash:liveGateway.fixtureHash,report:'evidence/results/jev-live-vercel-2026-09-23.json',requests:liveGateway.requests,correctOfTwelve:liveGateway.outcomes.correct,alwaysContinueCorrectOfTwelve:liveGateway.rows.filter(row=>row.expected==='continue').length,allDecisionsContinue:liveGateway.rows.every(row=>row.actual==='continue'),falseFinish:liveGateway.outcomes.falseFinish,falseContinue:liveGateway.outcomes.falseContinue,providerErrors:liveGateway.outcomes.providerErrors,inputTokens:liveGateway.inputTokens,estimatedKnownInputCostUsd:liveGateway.estimatedKnownInputCostUsd,limits:['One frozen synthetic suite is not calibration or production accuracy evidence.','The gateway alias does not establish the native Jev version.','All decisions were continue, so the observed score equals an always-continue baseline and this configuration is not recommended as an automated stop gate.']},
 };
 console.log(JSON.stringify(report,null,2));

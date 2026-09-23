@@ -93,6 +93,16 @@ test('Jev usage is exposed separately from semantic signals',async()=>{
   assert.deepEqual(result.providerUsage,{inputTokens:10,outputTokens:10});
   assert.equal('usage' in result.modelSignals,false);
 });
+test('Jev Vercel route pins the official compatibility endpoint and alias',async()=>{
+  let request;
+  const gatewayWire={...wire,model:'typesafe-ai/jev'};
+  const p=new JevProvider('synthetic-test-key',async(url,options)=>{request={url,options};return new Response(JSON.stringify(gatewayWire));},'vercel-ai-gateway');
+  const result=await new Supervisor(p).check(input);
+  assert.equal(result.decision,'finish'); assert.equal(result.model,'typesafe-ai/jev');
+  assert.equal(request.url,'https://ai-gateway.vercel.sh/typesafe/v1/systemone');
+  assert.equal(JSON.parse(request.options.body).model,'typesafe-ai/jev');
+});
+test('Jev rejects an unknown route at runtime',()=>assert.throws(()=>new JevProvider('synthetic-test-key',fetch,'unknown'),/INVALID_JEV_ROUTE/));
 for(const status of [401,429,500,529]) test(`Jev HTTP ${status} fails closed without raw body`,async()=>{
   let calls=0; const p=new JevProvider('synthetic-test-key',async()=>{calls++;return new Response('PRIVATE_KEY',{status});});
   const r=await new Supervisor(p).check(input); assert.equal(r.decision,'review');assert.equal(calls,1);assert.ok(!JSON.stringify(r).includes('PRIVATE_KEY'));

@@ -14,14 +14,17 @@ function createSupervisor() {
     if (!Number.isSafeInteger(value) || value < 1 || value > 1000000) throw new SafeError('INVALID_CONFIGURATION');
     return value;
   };
-  return new Supervisor(mode === 'jev' ? new JevProvider(process.env.TYPESAFE_API_KEY ?? '') : new MockProvider(), {
+  const route = process.env.MINDRAILS_JEV_ROUTE ?? 'typesafe';
+  if (mode === 'jev' && !['typesafe','vercel-ai-gateway'].includes(route)) throw new SafeError('INVALID_JEV_ROUTE');
+  const key = route === 'typesafe' ? process.env.TYPESAFE_API_KEY : process.env.AI_GATEWAY_API_KEY;
+  return new Supervisor(mode === 'jev' ? new JevProvider(key ?? '',fetch,route as 'typesafe'|'vercel-ai-gateway') : new MockProvider(), {
     maxCalls:positive('MINDRAILS_MAX_CALLS',100), maxInputBytes:positive('MINDRAILS_MAX_INPUT_BYTES',320000), timeoutMs:positive('MINDRAILS_TIMEOUT_MS',5000), threshold:0.9,
   });
 }
 async function main() {
   const [command, file] = process.argv.slice(2);
   if (!command || command === '--help') {
-    console.log('Mindrails Supervisor v0.2.0\nUsage: mindrails-supervisor demo | check <file.json> | stuck <file.json> | mcp\nThe demo is always synthetic. check and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev also requires TYPESAFE_API_KEY and may cost money.'); return;
+    console.log('Mindrails Supervisor v0.2.0\nUsage: mindrails-supervisor demo | check <file.json> | stuck <file.json> | mcp\nThe demo is always synthetic. check and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev defaults to the native TypeSafe route and TYPESAFE_API_KEY. The optional Vercel route uses MINDRAILS_JEV_ROUTE=vercel-ai-gateway and AI_GATEWAY_API_KEY. Inference may cost money.'); return;
   }
   if (command === 'demo') {
     const supervisor = new Supervisor(new MockProvider());

@@ -13,6 +13,8 @@ Public technical references checked 2026-09-23:
 - https://docs.typesafe.ai/confidence — signal interpretation.
 - https://typesafe.ai/legal/mca — API integration and service terms.
 - https://docs.typesafe.ai/legal — provider data policies.
+- https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe — fixed compatibility endpoint and model alias.
+- https://vercel.com/ai-gateway/models/jev — gateway model catalog and price.
 - https://github.com/modelcontextprotocol/typescript-sdk — SDK packages.
 
-No live Jev call or account modification was made. Mock transport tests are not live integration evidence. No measured savings, calibration, provider latency, SEO result or accuracy claim is made.
+A dedicated Vercel AI Gateway key was created for one frozen twelve-request Jev run; no key is stored in source, evidence or release artifacts. The run used the `typesafe-ai/jev` alias and cannot establish that native `jev-1.13.0` served it. All twelve decisions were `continue`, producing 7/12 accuracy, the same as an always-continue baseline. The native TypeSafe route was not called. No measured savings, calibration, provider latency, SEO result or general accuracy claim is made.

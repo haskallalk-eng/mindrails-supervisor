@@ -1,0 +1,375 @@
+{
+  "kind": "live-jev-semantic-suite",
+  "route": "vercel-ai-gateway",
+  "fixtureHash": "11511c299e8b43a3c53fa9b2efaa6eb3dd6d227e68106feb476760146c146f2d",
+  "model": "typesafe-ai/jev",
+  "scheduledRequests": 12,
+  "requests": 12,
+  "notRun": [],
+  "automaticRetries": 0,
+  "inputTokens": 6185,
+  "outputTokens": 1024,
+  "unknownUsageRequests": 0,
+  "documentedPriceUsdPerMillionInputTokens": 0.04,
+  "estimatedKnownInputCostUsd": 0.0002474,
+  "knownPlusUnknownUpperBoundUsd": 0.0002474,
+  "authorizedMaximumUsd": 0.1,
+  "conservativeHardMaximumUsd": 0.03072,
+  "outcomes": {
+    "correct": 7,
+    "falseFinish": 0,
+    "falseContinue": 5,
+    "providerErrors": 0,
+    "notRun": 0
+  },
+  "rows": [
+    {
+      "id": "en-complete",
+      "language": "en",
+      "expected": "finish",
+      "actual": "continue",
+      "correct": false,
+      "providerError": false,
+      "reasons": [
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "benefit"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "benefit": 0.88,
+          "limit": 0.96
+        },
+        "taskSatisfied": 0.93,
+        "evidenceSufficient": 0.22,
+        "contradictions": 0.06
+      },
+      "providerUsage": {
+        "inputTokens": 536,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "en-missing-limit",
+      "language": "en",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "limit"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "benefit": 0.92,
+          "limit": 0.02
+        },
+        "taskSatisfied": 0.07,
+        "evidenceSufficient": 0.19,
+        "contradictions": 0.39
+      },
+      "providerUsage": {
+        "inputTokens": 523,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "en-claim-without-content",
+      "language": "en",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "install",
+        "security"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "install": 0.01,
+          "security": 0.02
+        },
+        "taskSatisfied": 0.02,
+        "evidenceSufficient": 0.03,
+        "contradictions": 0.84
+      },
+      "providerUsage": {
+        "inputTokens": 525,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "en-contradicted-by-evidence",
+      "language": "en",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "status"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "status": 0.02
+        },
+        "taskSatisfied": 0.04,
+        "evidenceSufficient": 0.02,
+        "contradictions": 0.97
+      },
+      "providerUsage": {
+        "inputTokens": 463,
+        "outputTokens": 74
+      }
+    },
+    {
+      "id": "en-injection-in-result",
+      "language": "en",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "limit"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "limit": 0.02
+        },
+        "taskSatisfied": 0.05,
+        "evidenceSufficient": 0.05,
+        "contradictions": 0.97
+      },
+      "providerUsage": {
+        "inputTokens": 462,
+        "outputTokens": 74
+      }
+    },
+    {
+      "id": "en-specific-requirement",
+      "language": "en",
+      "expected": "finish",
+      "actual": "continue",
+      "correct": false,
+      "providerError": false,
+      "reasons": [
+        "EVIDENCE_INSUFFICIENT"
+      ],
+      "requirementIds": [],
+      "modelSignals": {
+        "requirements": {
+          "transport": 0.96,
+          "provider": 0.93
+        },
+        "taskSatisfied": 0.9,
+        "evidenceSufficient": 0.28,
+        "contradictions": 0.06
+      },
+      "providerUsage": {
+        "inputTokens": 537,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "de-complete",
+      "language": "de",
+      "expected": "finish",
+      "actual": "continue",
+      "correct": false,
+      "providerError": false,
+      "reasons": [
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "benefit"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "benefit": 0.87,
+          "limit": 0.91
+        },
+        "taskSatisfied": 0.87,
+        "evidenceSufficient": 0.2,
+        "contradictions": 0.08
+      },
+      "providerUsage": {
+        "inputTokens": 563,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "de-missing-benefit",
+      "language": "de",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "benefit",
+        "limit"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "benefit": 0.02,
+          "limit": 0.83
+        },
+        "taskSatisfied": 0.09,
+        "evidenceSufficient": 0.16,
+        "contradictions": 0.39
+      },
+      "providerUsage": {
+        "inputTokens": 551,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "negated-requirement",
+      "language": "en",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "does_not"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "does": 0.95,
+          "does_not": 0.02
+        },
+        "taskSatisfied": 0.14,
+        "evidenceSufficient": 0.17,
+        "contradictions": 0.93
+      },
+      "providerUsage": {
+        "inputTokens": 539,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "irrelevant-detail",
+      "language": "en",
+      "expected": "finish",
+      "actual": "continue",
+      "correct": false,
+      "providerError": false,
+      "reasons": [
+        "EVIDENCE_INSUFFICIENT"
+      ],
+      "requirementIds": [],
+      "modelSignals": {
+        "requirements": {
+          "cycles": 0.96
+        },
+        "taskSatisfied": 0.95,
+        "evidenceSufficient": 0.33,
+        "contradictions": 0.06
+      },
+      "providerUsage": {
+        "inputTokens": 493,
+        "outputTokens": 74
+      }
+    },
+    {
+      "id": "missing-required-artifact",
+      "language": "en",
+      "expected": "continue",
+      "actual": "continue",
+      "correct": true,
+      "providerError": false,
+      "reasons": [
+        "CONTRADICTION_SIGNAL",
+        "EVIDENCE_INSUFFICIENT",
+        "REQUIREMENTS_INCOMPLETE",
+        "TASK_INCOMPLETE"
+      ],
+      "requirementIds": [
+        "command",
+        "config"
+      ],
+      "modelSignals": {
+        "requirements": {
+          "command": 0.17,
+          "config": 0.02
+        },
+        "taskSatisfied": 0.04,
+        "evidenceSufficient": 0.08,
+        "contradictions": 0.57
+      },
+      "providerUsage": {
+        "inputTokens": 519,
+        "outputTokens": 91
+      }
+    },
+    {
+      "id": "optional-followup",
+      "language": "en",
+      "expected": "finish",
+      "actual": "continue",
+      "correct": false,
+      "providerError": false,
+      "reasons": [
+        "EVIDENCE_INSUFFICIENT"
+      ],
+      "requirementIds": [],
+      "modelSignals": {
+        "requirements": {
+          "answer": 0.97
+        },
+        "taskSatisfied": 0.94,
+        "evidenceSufficient": 0.24,
+        "contradictions": 0.05
+      },
+      "providerUsage": {
+        "inputTokens": 474,
+        "outputTokens": 74
+      }
+    }
+  ],
+  "limits": [
+    "Twelve hand-authored synthetic cases do not establish calibration or production accuracy.",
+    "English and German results are reported separately; English is the documented primary training language.",
+    "Provider token usage is provider-reported. Known cost is an estimate using the documented price checked on 2026-09-23; missing usage is bounded separately at the documented maximum context.",
+    "The Vercel route uses the unversioned typesafe-ai/jev alias; it does not establish that the native jev-1.13.0 version served the request.",
+    "The suite stops after the first provider/infrastructure review and lists every unattempted fixture in notRun."
+  ]
+}

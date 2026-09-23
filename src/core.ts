@@ -19,7 +19,7 @@ export interface Signals {
   contradictions: number;
   usage?: { inputTokens: number; outputTokens: number };
 }
-export interface DecisionProvider { readonly mode: 'mock' | 'jev'; evaluate(input: CompletionInput, signal: AbortSignal): Promise<Signals> }
+export interface DecisionProvider { readonly mode: 'mock' | 'jev'; readonly model?: string; evaluate(input: CompletionInput, signal: AbortSignal): Promise<Signals> }
 export class SafeError extends Error { constructor(public code: string) { super(code); } }
 export type Decision = { decision: 'finish' | 'continue' | 'review'; reasons: string[]; requirementIds: string[]; provider: string; model: string; policyVersion: string; synthetic: boolean; modelSignals?: Omit<Signals, 'usage'>; providerUsage?: Signals['usage'] };
 
@@ -32,7 +32,7 @@ export class Supervisor {
   }
   async check(raw: unknown): Promise<Decision> {
     const input = completionSchema.parse(raw);
-    const base = { provider: this.provider.mode, model:this.provider.mode === 'jev' ? 'jev-1.13.0' : 'synthetic-markers-v1', policyVersion:'0.1.1', synthetic:this.provider.mode === 'mock', requirementIds: [] as string[] };
+    const base = { provider: this.provider.mode, model:this.provider.model ?? (this.provider.mode === 'jev' ? 'jev-1.13.0' : 'synthetic-markers-v1'), policyVersion:'0.1.1', synthetic:this.provider.mode === 'mock', requirementIds: [] as string[] };
     if (input.trustedChecks?.some(c => c.status !== 'pass')) return { ...base, decision:'review', reasons:['HOST_CHECK_NOT_PASSED'] };
     if (!input.evidence && !input.requirements.every(r => r.evidence)) return { ...base, decision:'continue', reasons:['SUPPLIED_EVIDENCE_MISSING'] };
     const size = Buffer.byteLength(JSON.stringify(input));

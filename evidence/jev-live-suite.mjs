@@ -2,7 +2,10 @@ import { Supervisor } from '../dist/core.js';
 import { JevProvider } from '../dist/providers.js';
 import { createHash } from 'node:crypto';
 
-const PRICE_PER_MILLION_INPUT_TOKENS_USD=0.042;
+const route=process.env.MINDRAILS_JEV_ROUTE ?? 'typesafe';
+if(!['typesafe','vercel-ai-gateway'].includes(route)) throw new Error('INVALID_JEV_ROUTE');
+const model=route==='typesafe'?'jev-1.13.0':'typesafe-ai/jev';
+const PRICE_PER_MILLION_INPUT_TOKENS_USD=route==='typesafe'?0.042:0.04;
 const MAX_REQUESTS=12;
 const MAX_PROVIDER_TOKENS_PER_REQUEST=64000;
 const HARD_MAX_COST_USD=MAX_REQUESTS*MAX_PROVIDER_TOKENS_PER_REQUEST*PRICE_PER_MILLION_INPUT_TOKENS_USD/1_000_000;
@@ -24,17 +27,17 @@ const cases=[
 if(cases.length>MAX_REQUESTS) throw new Error('FIXTURE_EXCEEDS_MAX_REQUESTS');
 const fixtureHash=createHash('sha256').update(JSON.stringify(cases)).digest('hex');
 if(!process.argv.includes('--execute')){
-  console.log(JSON.stringify({mode:'dry-run',fixtureHash,cases:cases.map(({id,expected,task,requirements,result,evidence})=>({id,expected,language:id.startsWith('de-')?'de':'en',task,requirements,result,evidence})),maxRequests:MAX_REQUESTS,automaticRetries:0,documentedPriceUsdPerMillionInputTokens:PRICE_PER_MILLION_INPUT_TOKENS_USD,conservativeHardMaximumUsd:HARD_MAX_COST_USD,guard:'Execution requires --execute, MINDRAILS_ALLOW_PAID_JEV=I_UNDERSTAND_THIS_MAY_COST_MONEY, and TYPESAFE_API_KEY.'},null,2));
+  console.log(JSON.stringify({mode:'dry-run',route,model,fixtureHash,cases:cases.map(({id,expected,task,requirements,result,evidence})=>({id,expected,language:id.startsWith('de-')?'de':'en',task,requirements,result,evidence})),maxRequests:MAX_REQUESTS,automaticRetries:0,documentedPriceUsdPerMillionInputTokens:PRICE_PER_MILLION_INPUT_TOKENS_USD,conservativeHardMaximumUsd:HARD_MAX_COST_USD,guard:'Execution requires --execute, MINDRAILS_ALLOW_PAID_JEV=I_UNDERSTAND_THIS_MAY_COST_MONEY, and the route-specific key.'},null,2));
   process.exit(0);
 }
 if(process.env.MINDRAILS_ALLOW_PAID_JEV!=='I_UNDERSTAND_THIS_MAY_COST_MONEY') throw new Error('LIVE_JEV_COST_ACK_REQUIRED');
-const key=process.env.TYPESAFE_API_KEY;
-if(!key) throw new Error('TYPESAFE_API_KEY_REQUIRED');
+const key=route==='typesafe'?process.env.TYPESAFE_API_KEY:process.env.AI_GATEWAY_API_KEY;
+if(!key) throw new Error(route==='typesafe'?'TYPESAFE_API_KEY_REQUIRED':'AI_GATEWAY_API_KEY_REQUIRED');
 const rows=[];
 let inputTokens=0,outputTokens=0;
 let unknownUsageRequests=0;
 for(const fixture of cases){
-  const supervisor=new Supervisor(new JevProvider(key),{maxCalls:1,maxInputBytes:32000,timeoutMs:10000,threshold:.9});
+  const supervisor=new Supervisor(new JevProvider(key,fetch,route),{maxCalls:1,maxInputBytes:32000,timeoutMs:10000,threshold:.9});
   const result=await supervisor.check({task:fixture.task,currentResult:fixture.result,requirements:fixture.requirements.map(([id,description])=>({id,description})),evidence:fixture.evidence});
   if(result.providerUsage){inputTokens+=result.providerUsage.inputTokens;outputTokens+=result.providerUsage.outputTokens;}else unknownUsageRequests++;
   // All suite inputs satisfy local preconditions and each case has a fresh budget.
@@ -47,4 +50,4 @@ const estimatedInputCostUsd=inputTokens*PRICE_PER_MILLION_INPUT_TOKENS_USD/1_000
 const knownPlusUnknownUpperBoundUsd=estimatedInputCostUsd+unknownUsageRequests*MAX_PROVIDER_TOKENS_PER_REQUEST*PRICE_PER_MILLION_INPUT_TOKENS_USD/1_000_000;
 const attemptedIds=new Set(rows.map(row=>row.id));
 const notRun=cases.filter(fixture=>!attemptedIds.has(fixture.id)).map(fixture=>fixture.id);
-console.log(JSON.stringify({kind:'live-jev-semantic-suite',fixtureHash,model:'jev-1.13.0',scheduledRequests:cases.length,requests:rows.length,notRun,automaticRetries:0,inputTokens,outputTokens,unknownUsageRequests,documentedPriceUsdPerMillionInputTokens:PRICE_PER_MILLION_INPUT_TOKENS_USD,estimatedKnownInputCostUsd:estimatedInputCostUsd,knownPlusUnknownUpperBoundUsd,authorizedMaximumUsd:0.10,conservativeHardMaximumUsd:HARD_MAX_COST_USD,outcomes:{correct:rows.filter(x=>x.correct).length,falseFinish:rows.filter(x=>!x.providerError&&x.expected==='continue'&&x.actual==='finish').length,falseContinue:rows.filter(x=>!x.providerError&&x.expected==='finish'&&x.actual==='continue').length,providerErrors:rows.filter(x=>x.providerError).length,notRun:notRun.length},rows,limits:['Twelve hand-authored synthetic cases do not establish calibration or production accuracy.','English and German results are reported separately; English is the documented primary training language.','Provider token usage is provider-reported. Known cost is an estimate using the documented price checked on 2026-09-23; missing usage is bounded separately at the documented maximum context.','The suite stops after the first provider/infrastructure review and lists every unattempted fixture in notRun.']},null,2));
+console.log(JSON.stringify({kind:'live-jev-semantic-suite',route,fixtureHash,model,scheduledRequests:cases.length,requests:rows.length,notRun,automaticRetries:0,inputTokens,outputTokens,unknownUsageRequests,documentedPriceUsdPerMillionInputTokens:PRICE_PER_MILLION_INPUT_TOKENS_USD,estimatedKnownInputCostUsd:estimatedInputCostUsd,knownPlusUnknownUpperBoundUsd,authorizedMaximumUsd:0.10,conservativeHardMaximumUsd:HARD_MAX_COST_USD,outcomes:{correct:rows.filter(x=>x.correct).length,falseFinish:rows.filter(x=>!x.providerError&&x.expected==='continue'&&x.actual==='finish').length,falseContinue:rows.filter(x=>!x.providerError&&x.expected==='finish'&&x.actual==='continue').length,providerErrors:rows.filter(x=>x.providerError).length,notRun:notRun.length},rows,limits:['Twelve hand-authored synthetic cases do not establish calibration or production accuracy.','English and German results are reported separately; English is the documented primary training language.','Provider token usage is provider-reported. Known cost is an estimate using the documented price checked on 2026-09-23; missing usage is bounded separately at the documented maximum context.','The Vercel route uses the unversioned typesafe-ai/jev alias; it does not establish that the native jev-1.13.0 version served the request.','The suite stops after the first provider/infrastructure review and lists every unattempted fixture in notRun.']},null,2));

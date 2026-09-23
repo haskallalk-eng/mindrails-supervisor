@@ -8,7 +8,8 @@
 - Correct mock evidence handling when every requirement supplies evidence.
 - Surface Jev token usage separately from semantic signals.
 - Add a real MCP scenario runner, fixed baseline evidence and a double-gated live Jev check.
-- Document measured implementation gains and unresolved semantic-model validation.
+- Add the official fixed Vercel TypeSafe-compatible Jev route with distinct model provenance.
+- Document measured implementation gains and the first bounded live Jev gateway result (7/12, no false finishes or provider errors).
 
 ## 0.1.0 — 2026-09-23
 
