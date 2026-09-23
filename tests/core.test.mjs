@@ -34,7 +34,7 @@ test('missing supplied evidence vetoes even perfect provider signals',async()=>{
 });
 test('threshold boundaries and provenance',async()=>{
   const r=await new Supervisor(provider({...good,requirements:{a:.9,b:.9},taskSatisfied:.9,evidenceSufficient:.9,contradictions:.1})).check(input);
-  assert.equal(r.decision,'finish');assert.equal(r.synthetic,true);assert.equal(r.policyVersion,'0.1.0');
+  assert.equal(r.decision,'finish');assert.equal(r.synthetic,true);assert.equal(r.policyVersion,'0.1.1');
 });
 test('wire body limited before transport and total normalized input bounded',async()=>{
   let calls=0;
@@ -58,6 +58,27 @@ test('repetition only across three trailing unchanged steps',()=>{
   for(const steps of [[],[step,step],[step,step,{...step,progress:true}],[step,step,{...step,result:'new'}]]) assert.equal(detectStuck({steps}).stuck,false);
   assert.throws(()=>detectStuck({steps:Array(51).fill(step)}));
 });
+test('detects alternating and three-step trailing cycles',()=>{
+  const a={...step,action:'a'},b={...step,action:'b'},c={...step,action:'c'};
+  const alternating=detectStuck({steps:[a,b,a,b,a,b]});
+  assert.equal(alternating.stuck,true);assert.equal(alternating.cycleLength,2);assert.deepEqual(alternating.matchedIndices,[0,1,2,3,4,5]);
+  const three=detectStuck({steps:[a,b,c,a,b,c,a,b,c]});
+  assert.equal(three.stuck,true);assert.equal(three.cycleLength,3);assert.equal(three.repetitionCount,3);
+});
+test('bounded repeat grace expires and cannot hide progress changes',()=>{
+  assert.equal(detectStuck({steps:[step,step,step],allowedExtraRepetitions:2}).stuck,false);
+  assert.equal(detectStuck({steps:[step,step,step,step,step],allowedExtraRepetitions:2}).stuck,true);
+  assert.throws(()=>detectStuck({steps:[step,step,step],allowedExtraRepetitions:3}));
+});
+test('old progress does not hide a later stuck suffix',()=>{
+  assert.equal(detectStuck({steps:[{...step,progress:true},step,step,step]}).stuck,true);
+  const a={...step,action:'a'},b={...step,action:'b'};
+  assert.equal(detectStuck({steps:[{...a,progress:true},b,a,b,a,b,a,b]}).stuck,true);
+});
+test('mock accepts evidence supplied per requirement',async()=>{
+  const perRequirement={...input,evidence:undefined,requirements:input.requirements.map(r=>({...r,evidence:`synthetic ${r.id}`}))};
+  assert.equal((await new Supervisor(new MockProvider()).check(perRequirement)).decision,'finish');
+});
 const wire={model:'jev-1.13.0',answers:Object.fromEntries(['r0','r1','task','evidence','contradictions'].map(k=>[k,{type:'noul',noul:k==='contradictions'?0:1}])),usage:{input_tokens:10,output_tokens:10}};
 test('Jev contract with fake transport, fixed URL and internal IDs',async()=>{
   let request;
@@ -65,6 +86,12 @@ test('Jev contract with fake transport, fixed URL and internal IDs',async()=>{
   assert.equal((await new Supervisor(p).check(input)).decision,'finish');
   assert.equal(request.url,'https://api.typesafe.ai/v1/systemone'); assert.equal(request.options.redirect,'error');
   const body=JSON.parse(request.options.body); assert.ok(body.questions.r0); assert.equal(body.questions.a,undefined);
+});
+test('Jev usage is exposed separately from semantic signals',async()=>{
+  const p=new JevProvider('synthetic-test-key',async()=>new Response(JSON.stringify(wire)));
+  const result=await new Supervisor(p).check(input);
+  assert.deepEqual(result.providerUsage,{inputTokens:10,outputTokens:10});
+  assert.equal('usage' in result.modelSignals,false);
 });
 for(const status of [401,429,500,529]) test(`Jev HTTP ${status} fails closed without raw body`,async()=>{
   let calls=0; const p=new JevProvider('synthetic-test-key',async()=>{calls++;return new Response('PRIVATE_KEY',{status});});

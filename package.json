@@ -1,12 +1,15 @@
 {
   "name": "mindrails-supervisor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local MCP completion gates and loop detection for AI agents, with optional Jev evaluation. By Mindrails.",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "demo": "node dist/cli.js demo",
+    "e2e": "node examples/mcp-e2e.mjs",
+    "evidence": "node evidence/run.mjs",
+    "jev:suite:dry-run": "node evidence/jev-live-suite.mjs",
     "prepack": "npm run build"
   },
   "keywords": [],
@@ -30,6 +33,7 @@
     "dist",
     "examples",
     "docs",
+    "evidence",
     "README.md",
     "LICENSE",
     "NOTICE",

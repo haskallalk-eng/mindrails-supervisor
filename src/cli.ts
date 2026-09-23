@@ -6,7 +6,8 @@ import { completionSchema, stuckSchema, Supervisor, detectStuck, SafeError } fro
 import { MockProvider, JevProvider } from './providers.js';
 
 function createSupervisor() {
-  const mode = process.env.MINDRAILS_PROVIDER ?? 'mock';
+  const mode = process.env.MINDRAILS_PROVIDER;
+  if (!mode) throw new SafeError('MINDRAILS_PROVIDER_REQUIRED');
   if (!['mock','jev'].includes(mode)) throw new SafeError('INVALID_PROVIDER');
   const positive = (name:string, fallback:number) => {
     const value = Number(process.env[name] ?? fallback);
@@ -20,7 +21,7 @@ function createSupervisor() {
 async function main() {
   const [command, file] = process.argv.slice(2);
   if (!command || command === '--help') {
-    console.log('Mindrails Supervisor v0.1.0\nUsage: mindrails-supervisor demo | check <file.json> | stuck <file.json> | mcp\nDefault provider: mock (synthetic markers; no semantic judgment). Jev: set MINDRAILS_PROVIDER=jev and TYPESAFE_API_KEY.'); return;
+    console.log('Mindrails Supervisor v0.2.0\nUsage: mindrails-supervisor demo | check <file.json> | stuck <file.json> | mcp\nThe demo is always synthetic. check and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev also requires TYPESAFE_API_KEY and may cost money.'); return;
   }
   if (command === 'demo') {
     const supervisor = new Supervisor(new MockProvider());
@@ -37,12 +38,12 @@ async function main() {
   }
   if (command === 'mcp') {
     const supervisor = createSupervisor();
-    const server = new McpServer({name:'mindrails-supervisor',version:'0.1.0'});
+    const server = new McpServer({name:'mindrails-supervisor',version:'0.2.0'});
     const format = (v:object) => ({content:[{type:'text' as const,text:JSON.stringify(v)}],structuredContent:v as Record<string,unknown>});
-    server.registerTool('check_completion', {description:'Advisory completion gate. Default mock uses synthetic markers. Evidence and trustedChecks are host supplied, not independently verified. Jev mode sends inputs to TypeSafe and may cost money.', inputSchema:completionSchema}, async input => {
+    server.registerTool('check_completion', {description:'Advisory completion gate. Provider selection is explicit; mock uses synthetic markers. Evidence and trustedChecks are host supplied, not independently verified. Jev mode sends inputs to TypeSafe and may cost money.', inputSchema:completionSchema}, async input => {
       try { return format(await supervisor.check(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
     });
-    server.registerTool('detect_stuck', {description:'Detect three identical trailing steps without caller-reported progress. Does not evaluate semantic progress.',inputSchema:stuckSchema}, async input => format(detectStuck(input)));
+    server.registerTool('detect_stuck', {description:'Detect at least three trailing repetitions of a one-to-three-step cycle without caller-reported progress. Optional caller-declared grace allows at most two extra repetitions. Does not evaluate semantic progress.',inputSchema:stuckSchema}, async input => format(detectStuck(input)));
     await server.connect(new StdioServerTransport()); return;
   }
   if ((command === 'check' || command === 'stuck') && file) {

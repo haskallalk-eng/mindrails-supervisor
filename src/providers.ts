@@ -6,7 +6,7 @@ export class MockProvider implements DecisionProvider {
   readonly mode = 'mock';
   async evaluate(input: CompletionInput): Promise<Signals> {
     const requirements = Object.fromEntries(input.requirements.map(r => [r.id,input.currentResult.includes(`[done:${r.id}]`) ? 1 : 0]));
-    return { requirements, taskSatisfied:Object.values(requirements).every(v => v === 1) ? 1 : 0, evidenceSufficient:input.evidence ? 1 : 0, contradictions:input.currentResult.includes('[contradiction]') ? 1 : 0 };
+    return { requirements, taskSatisfied:Object.values(requirements).every(v => v === 1) ? 1 : 0, evidenceSufficient:input.evidence || input.requirements.every(r=>r.evidence) ? 1 : 0, contradictions:input.currentResult.includes('[contradiction]') ? 1 : 0 };
   }
 }
 export class JevProvider implements DecisionProvider {
@@ -32,6 +32,6 @@ export class JevProvider implements DecisionProvider {
     const answer = z.object({type:z.literal('noul'),noul:z.number().finite().min(0).max(1)});
     const body = z.object({model:z.literal('jev-1.13.0'),answers:z.record(z.string(),answer),usage:z.object({input_tokens:z.number().int().nonnegative(),output_tokens:z.number().int().nonnegative()})}).parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
     for (const id of Object.keys(questions)) if (!Object.hasOwn(body.answers,id)) throw new SafeError('INVALID_PROVIDER_RESPONSE');
-    return {requirements:Object.fromEntries(input.requirements.map((r,i) => [r.id,body.answers[`r${i}`]!.noul])),taskSatisfied:body.answers.task!.noul,evidenceSufficient:body.answers.evidence!.noul,contradictions:body.answers.contradictions!.noul};
+    return {requirements:Object.fromEntries(input.requirements.map((r,i) => [r.id,body.answers[`r${i}`]!.noul])),taskSatisfied:body.answers.task!.noul,evidenceSufficient:body.answers.evidence!.noul,contradictions:body.answers.contradictions!.noul,usage:{inputTokens:body.usage.input_tokens,outputTokens:body.usage.output_tokens}};
   }
 }

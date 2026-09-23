@@ -33,10 +33,12 @@ Mock mode uses explicit `[done:id]` markers and supplied fixture evidence. It de
 ## CLI and host loop
 
 ```sh
-node dist/cli.js check examples/check.json
 node examples/agent-loop.mjs
-node dist/cli.js mcp
+npm run e2e
+npm run evidence
 ```
+
+For a direct check, select the provider explicitly. Unix: `MINDRAILS_PROVIDER=mock node dist/cli.js check examples/check.json`. PowerShell: `$env:MINDRAILS_PROVIDER='mock'; node dist/cli.js check examples/check.json`. The `stuck` command is deterministic and needs no provider.
 
 `check <file.json>` returns an advisory decision. `stuck <file.json>` accepts `{ "steps": [{ "action": "search", "input": "q", "result": "same", "progress": false }] }`. Exit status 0 means the evaluation was returned successfully, including `continue` or `review`; the host must inspect `decision`. Invalid input/startup uses exit status 1.
 
@@ -45,11 +47,11 @@ node dist/cli.js mcp
 | Tool | Input | Result |
 | --- | --- | --- |
 | `check_completion` | task, currentResult, 1–20 unique requirements, supplied evidence; optional trustedChecks | finish / continue / review, reason codes, missing requirement IDs, raw model signals and provenance |
-| `detect_stuck` | Up to 50 caller-supplied action/input/result/progress steps | Three identical trailing steps without reported progress, with zero-based matched indices |
+| `detect_stuck` | Up to 50 caller-supplied action/input/result/progress steps; optional `allowedExtraRepetitions` from 0–2 | At least three trailing repetitions of a one-to-three-step cycle, with zero-based matched indices |
 
 Completion requires every requirement and task/evidence signal to reach 0.9, and contradiction signal at most 0.1. Supplied global evidence or evidence on every requirement is mandatory. Any declared `trustedChecks` entry with `fail` or `unknown` blocks completion. **Despite the field name, these checks are caller-declared, unauthenticated statuses.** An agent can lie about them; obtain checks from a trusted host boundary if you need enforcement.
 
-`finish` means this policy accepts the supplied information. It does not establish real-world success. Evidence is not fetched or independently verified. Thresholds are initial policy defaults, not calibrated guarantees. Changed results or reported progress interrupt repeat detection; semantic loops may go undetected.
+`finish` means this policy accepts the supplied information. It does not establish real-world success. Evidence is not fetched or independently verified. Thresholds are initial policy defaults, not calibrated guarantees. Changed results or reported progress interrupt repeat detection; four-step cycles, timestamp-changing errors and other semantic loops may go undetected. Repeat grace is caller supplied and cannot prove that polling is legitimate.
 
 ## MCP setup
 
@@ -71,7 +73,7 @@ On Windows use your absolute path with JSON-escaped backslashes. MCP results adv
 
 ## Optional Jev mode (BYOK)
 
-Set `MINDRAILS_PROVIDER=jev` and supply `TYPESAFE_API_KEY` through your host's secret environment. Then use the same commands. Environment files are not loaded automatically. Do not put keys in committed configuration or command history.
+Set `MINDRAILS_PROVIDER=jev` and supply `TYPESAFE_API_KEY` through your host's secret environment. Then use the same commands. Provider selection is mandatory for `check` and `mcp`, preventing an accidental synthetic default or billable default. Environment files are not loaded automatically. Do not put keys in committed configuration or command history.
 
 Jev mode sends task, result, requirements and supplied evidence to TypeSafe's fixed HTTPS endpoint. Inference may incur charges under your TypeSafe account. The Apache license covers this software, not the Jev service. See [TypeSafe's API](https://docs.typesafe.ai/api), [account terms](https://typesafe.ai/legal/mca) and [data policies](https://docs.typesafe.ai/legal). The adapter pins `jev-1.13.0`, verifies the returned model and uses Noul signals only. **Live Jev inference has not been exercised for this release**; transport contract tests use synthetic responses.
 
@@ -97,9 +99,9 @@ npm test
 npm pack
 ```
 
-Tests cover policy vetoes, bounds, timeouts, malformed responses, budgets, loop detection, CLI and actual MCP transport. The dataset is synthetic; no accuracy, cost savings or performance benchmark is claimed. See [architecture](docs/architecture.md), [provenance](docs/provenance.md), [security](SECURITY.md) and [contributing](CONTRIBUTING.md).
+Tests cover policy vetoes, bounds, timeouts, malformed responses, budgets, loop detection, CLI and actual MCP transport. `npm run e2e` prints ten concrete official-client scenarios. `npm run evidence` reproduces the fixed trace comparison and deterministic-policy baselines. The datasets are synthetic; no production accuracy, cost savings or performance benchmark is claimed. See [evidence](docs/evidence.md), [architecture](docs/architecture.md), [provenance](docs/provenance.md), [security](SECURITY.md) and [contributing](CONTRIBUTING.md).
 
-v0.1 intentionally excludes hosted MCP, persistent run state, dashboards, routing and automatic actions. Feedback on incorrect decisions is welcome using synthetic or redacted examples. No npm registry publication is provided; use the repository or GitHub release package.
+v0.2 intentionally excludes hosted MCP, persistent run state, dashboards, routing and automatic actions. Feedback on incorrect decisions is welcome using synthetic or redacted examples. No npm registry publication is provided; use the repository or GitHub release package.
 
 ## License
 
