@@ -11,5 +11,5 @@ if(hits.length){console.error('Release scan requires review:',hits.join(', '));p
 const deps=[];
 function inventory(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(!entry.isDirectory()||entry.name.startsWith('.'))continue;const path=join(dir,entry.name);if(entry.name.startsWith('@')){inventory(path);continue;}try{const p=JSON.parse(readFileSync(join(path,'package.json'),'utf8'));deps.push({name:p.name,version:p.version,license:p.license??'UNSPECIFIED'});}catch{}}}
 inventory(join(root,'node_modules'));
-writeFileSync(join(root,'docs','dependencies.json'),JSON.stringify(deps.sort((a,b)=>a.name.localeCompare(b.name)),null,2)+'\n');
+writeFileSync(join(root,'docs','dependencies.json'),JSON.stringify({note:'npm metadata only; supplied LICENSE files govern. MCP packages have MIT/Apache-2.0 transition and CC-BY-4.0 documentation; see provenance.md.',packages:deps.sort((a,b)=>a.name.localeCompare(b.name))},null,2)+'\n');
 console.log(`Dependency licenses: ${deps.length} installed packages; ${[...new Set(deps.map(p=>p.license))].join(', ')}`);

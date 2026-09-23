@@ -3,5 +3,8 @@ Copyright 2026 Mindrails Supervisor contributors
 
 Original project code is licensed under Apache License 2.0.
 Dependencies are separately licensed and installed through npm; they are not bundled.
-@modelcontextprotocol/server and zod use MIT licenses.
+The MCP packages are undergoing a MIT to Apache-2.0 transition. Their supplied
+LICENSE files govern each contribution: new/relicensed code is Apache-2.0,
+unrelicensed older code remains MIT, and non-spec documentation is CC-BY-4.0.
+Their npm metadata alone does not describe that transition. Zod uses MIT.
 Jev and TypeSafe are third-party names; no endorsement or affiliation is implied.

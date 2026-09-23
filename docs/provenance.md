@@ -4,7 +4,7 @@ All product source, fixtures and documentation were created independently for th
 
 Apache-2.0 was selected for this original code to provide explicit patent-license terms and clear redistribution conditions. It does not license TypeSafe's service, model, trademarks or documentation. The complete Apache license is from https://www.apache.org/licenses/LICENSE-2.0.txt.
 
-Runtime dependencies are installed from the npm registry with exact versions in package-lock.json; their license files remain in node_modules when installed. The release package does not bundle node_modules. MCP server and Zod are MIT. Development tooling includes the MIT MCP client/Node types and Apache-2.0 TypeScript. See the generated dependency inventory for the complete installed set.
+Runtime dependencies are installed from the npm registry with exact versions in package-lock.json; their license files remain in node_modules when installed. The release package does not bundle node_modules. The MCP server/client/core supplied LICENSE files describe a transition: new and relicensed code uses Apache-2.0; contributions without relicensing permission remain MIT; non-spec documentation uses CC-BY-4.0. npm metadata still reports MIT and is not the full licensing statement. Zod and Node types use MIT, TypeScript uses Apache-2.0. See the generated dependency inventory for package metadata; actual supplied licenses govern. No MCP documentation or implementation is copied into this package.
 
 Public technical references checked 2026-09-23:
 
