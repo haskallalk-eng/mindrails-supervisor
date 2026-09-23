@@ -1,0 +1,7 @@
+Mindrails Supervisor
+Copyright 2026 Mindrails Supervisor contributors
+
+Original project code is licensed under Apache License 2.0.
+Dependencies are separately licensed and installed through npm; they are not bundled.
+@modelcontextprotocol/server and zod use MIT licenses.
+Jev and TypeSafe are third-party names; no endorsement or affiliation is implied.

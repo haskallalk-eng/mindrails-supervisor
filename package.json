@@ -1,0 +1,48 @@
+{
+  "name": "mindrails-supervisor",
+  "version": "0.1.0",
+  "description": "Local MCP completion gates and loop detection for AI agents, with optional Jev evaluation. By Mindrails.",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "demo": "node dist/cli.js demo",
+    "prepack": "npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "24.13.6",
+    "typescript": "7.0.2"
+  },
+  "private": true,
+  "bin": {
+    "mindrails-supervisor": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    ".env.example"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/haskallalk-eng/mindrails-supervisor.git"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

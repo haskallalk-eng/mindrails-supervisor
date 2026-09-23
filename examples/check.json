@@ -1,0 +1,12 @@
+{
+  "task": "Prepare a small release",
+  "currentResult": "[done:readme] [done:tests] [done:build]",
+  "requirements": [
+    { "id": "readme", "description": "Include a README" },
+    { "id": "tests", "description": "Include tests" },
+    { "id": "build", "description": "Build successfully" },
+    { "id": "license", "description": "Include license" },
+    { "id": "security", "description": "Include security policy" }
+  ],
+  "evidence": "Synthetic fixture for offline mock demonstration; no actual build attestation."
+}
