@@ -1,0 +1,17 @@
+# Jev model routing before submission
+
+Run `jev` in your project for a local interactive conversation, or `jev "Your task"` for one task. Installed using `npm link` after `npm run build`. Node 24 and an authenticated Codex CLI are required. On Windows, `scripts/Start-Jev.ps1` refreshes the existing user-scoped gateway key and starts a conversation with workspace edits enabled. No OpenAI API key is required: execution uses the existing Codex login and its usage limits. Jev inference uses `AI_GATEWAY_API_KEY` and may incur Vercel/TypeSafe charges.
+
+1. Read the account's current visible model catalog via the Codex app server. Candidates are available GPT-6 Astra, Sol and Luna, with catalog descriptions and their default reasoning efforts.
+2. Send the upcoming task and, for a resumed conversation, visible stored history to Jev. Internal reasoning is excluded; common credentials are redacted. Repository files are not automatically loaded into the routing context.
+3. Validate the full probability distribution and choose its exact maximum. Low confidence does not override the maximum. Exact ties retain the baseline if tied, otherwise prefer Astra, then Sol, then Luna.
+4. Start Codex once with an explicit `--model` and a supported default reasoning effort. The original task goes over stdin, unchanged. Jev's answer is never executed as code.
+5. Print the assistant's answer and keep the session ID for the next input. Each new input is independently routed using the saved visible history. `/exit` ends the local interface. `jev --resume UUID` continues a saved conversation.
+
+The baseline is the current model in an interactive Jev conversation; a fresh invocation starts with the catalog default. A resumed invocation currently also starts from the catalog default for fallback. Missing keys, timeout, HTTP error, invalid output or routing context above 64 KB preserve this baseline with a visible reason and no invented probabilities. Catalog/read failures stop before dispatch. There are no automatic retries after dispatch failures. Requests to Jev time out after eight seconds; model catalog lookup after twenty seconds. Long history is not silently sampled: oversized context uses the baseline.
+
+`jev` defaults to read-only execution. `jev --workspace-write` permits project edits. Both use Codex's sandbox and never grant additional approvals automatically; actions requiring approval fail in this noninteractive execution path. Existing user/project configuration still applies. `--ephemeral` runs an isolated one-off conversation without storing its session. Text input only; attachments and native approval dialogs are not implemented. The Stop review is disabled for these routed executions to avoid a second paid Jev review.
+
+**This is a separate local input path. It does not intercept the native Codex desktop composer, add a chat icon, or change models in already running tasks.** The supported UserPromptSubmit hook exposes context/blocking output, but no model override. Native composer integration remains unfinished. The model probabilities are Jev's relative suitability judgments, not measured task-success rates. End-to-end execution proves dispatch works; it does not establish routing quality on real development tasks.
+
+References: [Codex hooks](https://learn.chatgpt.com/docs/hooks), [model catalog and model selection at turn start](https://learn.chatgpt.com/docs/app-server).

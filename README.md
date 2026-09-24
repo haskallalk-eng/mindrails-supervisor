@@ -4,6 +4,8 @@ A local MCP completion gate for AI agents, with optional Jev judgments and deter
 
 An independent open-source project by [Mindrails](https://mindrails.de).
 
+**New: route before execution.** The separate local `jev` command asks Jev to choose between the available GPT-6 Astra, Sol and Luna models, then starts Codex with the highest-probability model. Run `npm run build`, `npm link`, then `jev --workspace-write` in your project. Each input is routed before execution; subsequent inputs include visible conversation history. This does **not** intercept the Codex desktop chat composer. See [setup, failure behavior and limitations](docs/model-routing.md). This preflight argmax policy is separate from the plugin's advisory uncertainty policy below.
+
 Check explicit requirements before an agent stops, and flag repeated steps. The host remains responsible for verification, permissions and execution.
 
 **Jev recovery advice:** the optional Codex review now asks three additional focused questions in the same request: is the current work advancing, what is the dominant unresolved obstacle, and what next step fits? When the answers agree with sufficient confidence and selected probability, Mindrails presents a prepared follow-up prompt: resolve a prerequisite, ask for a missing decision, change approach, verify the result, or correct a missed requirement. Productive work gets no recovery interruption. Conflicts and uncertainty produce no action prompt; an environment blocker suppresses a contradictory model-upgrade suggestion. Jev classifies; application code selects the fixed wording. Prompts are never dispatched automatically.
