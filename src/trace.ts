@@ -1,16 +1,16 @@
 import { z } from 'zod';
 
-const shortText = z.string().trim().min(1).max(4000);
+const shortText = z.string().trim().min(1).max(6000);
 export const traceTriageSchema = z.object({
   task: shortText,
   instructions: shortText,
-  turns: z.array(z.object({ role: z.enum(['user','assistant','system']), content: z.string().max(4000) }).strict()).max(30),
-  toolCalls: z.array(z.object({ name: z.string().min(1).max(128), arguments: z.string().max(2000), result: z.string().max(3000) }).strict()).max(20),
-  finalMessage: z.string().max(4000),
-  feedback: z.string().max(2000).optional(),
+  turns: z.array(z.object({ role: z.enum(['user','assistant','system']), content: z.string().max(6000) }).strict()).max(120),
+  toolCalls: z.array(z.object({ name: z.string().min(1).max(128), arguments: z.string().max(4000), result: z.string().max(6000) }).strict()).max(50),
+  finalMessage: z.string().max(6000),
+  feedback: z.string().max(3000).optional(),
   actions: z.array(z.object({ name: z.string().min(1).max(128), permitted: z.boolean(), performed: z.boolean() }).strict()).max(20).optional(),
 }).strict().superRefine((value, ctx) => {
-  if (Buffer.byteLength(JSON.stringify(value)) > 24000) ctx.addIssue({ code:'custom', message:'Input exceeds 24000 bytes' });
+  if (Buffer.byteLength(JSON.stringify(value)) > 48000) ctx.addIssue({ code:'custom', message:'Input exceeds 48000 bytes' });
 });
 export type TraceTriageInput = z.infer<typeof traceTriageSchema>;
 

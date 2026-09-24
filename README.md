@@ -76,13 +76,11 @@ Tested: official `@modelcontextprotocol/client` 2.0.0 over stdio. The following 
 
 On Windows use your absolute path with JSON-escaped backslashes. MCP results advise the host; this server cannot force it to continue, execute tools or switch its internal model.
 
-## Review a Codex chat (local plugin preview)
+## Automatic Jev review for Codex (local plugin preview)
 
-The `plugins/jev-chat-review` package adds a Codex skill for the current chat. Once installed, ask Codex **“Review this chat with Jev.”** The skill builds a concise summary from the conversation already visible to Codex, so the user does not need to copy or upload a transcript. It runs only on an explicit review request and reports Jev's advisory result; it does not automatically send every chat or perform follow-up actions.
+The `plugins/jev-chat-review` package registers a local Codex Stop hook. Once installed, trusted, and configured with `AI_GATEWAY_API_KEY`, Jev automatically reviews the complete available chat transcript and recorded tool activity after each completed run. The one-time Codex hook trust step is required; after setup, there is no review command, transcript copy, or upload step. Results are advisory; Jev never continues or closes work, creates issues, or takes actions. Reviews may incur provider charges. Set `MINDRAILS_JEV_AUTO_REVIEW=0` or disable the plugin to stop them.
 
-The plugin starts the bundled local MCP server. Build it with `npm ci` and `npm run build` from the repository root, then make `AI_GATEWAY_API_KEY` available to the Codex desktop process. Before sending, Codex explains that the summary goes to the configured Vercel TypeSafe-compatible route and may incur charges. The skill instructs Codex to omit secrets and unrelated personal details, but this is not a deterministic redaction guarantee; users should avoid requesting review of sensitive chats until a stronger local filter is added.
-
-This is a local integration preview, not yet a published or one-click install. Codex installation still needs a local plugin marketplace entry. See [`plugins/jev-chat-review/README.md`](plugins/jev-chat-review/README.md) for the package and limits.
+The hook reads Codex's local transcript, redacts common credential patterns, and sends the trace to Vercel AI Gateway. This is not a guarantee that every secret or personal detail is detected. Codex's transcript format is not a stable interface. Oversized traces are reported as unreviewed instead of silently truncated. This is a local integration preview, not a published one-click install. See [`plugins/jev-chat-review/README.md`](plugins/jev-chat-review/README.md) for setup, data handling, and limits.
 
 ## Optional Jev mode (BYOK)
 

@@ -1,13 +1,13 @@
 ---
 name: review-current-chat
-description: Review the current Codex chat or agent run with Jev when the user asks to check, triage, or review this chat/run. Uses the current conversation context so the user does not need to copy or upload a transcript.
+description: Explain Jev's automatic Codex run review, or request an additional review of an in-progress chat when the user explicitly asks.
 ---
 
-# Review the current Codex run
+# Jev review in Codex
 
-Use this workflow only when the user explicitly asks to review, check, or triage the current chat or agent run. Do not send conversation content to Jev automatically at the end of ordinary tasks.
+Jev is configured to review each completed Codex run automatically through the plugin's Stop hook. Do not manually call the review tool after a run that has already completed; that would duplicate the review. Explain that the result appears after the run ends and is advisory.
 
-Before calling the tool, tell the user briefly that a concise, redacted summary of the current chat will be sent to the configured Jev provider and may incur provider charges. The user's explicit request to review this chat authorizes that one review; do not ask for a second confirmation unless the requested scope is ambiguous.
+If the user explicitly asks for an immediate review while the run is still active, tell them that the visible conversation and tool outcomes will be sent to the configured Jev provider and may incur charges. Their request authorizes that one additional review; do not ask for a second confirmation unless scope is ambiguous.
 
 Build `triage_agent_run` input from the current conversation context. Do not ask the user to paste the transcript. Include:
 
