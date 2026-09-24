@@ -12,9 +12,10 @@ async function run(name,expected,call){
 const requirement={id:'tested',description:'A test result is supplied'};
 try {
   await client.connect(transport);
-  await run('tool discovery',['check_completion','detect_stuck'],async()=>(await client.listTools()).tools.map(t=>t.name).sort());
+  await run('tool discovery',['check_completion','detect_stuck','triage_agent_run'],async()=>(await client.listTools()).tools.map(t=>t.name).sort());
+  await run('trace triage fixture','AUTO_CLOSE',async()=>(await client.callTool({name:'triage_agent_run',arguments:{task:'Prepare result',instructions:'Use given material',turns:[],toolCalls:[],finalMessage:'[mock:complete] Result ready.'}})).structuredContent.recommendation);
   await run('premature completion','continue',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'Done',requirements:[requirement],evidence:'Synthetic fixture'}})).structuredContent.decision);
-  await run('missing evidence veto without provider call','continue',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'[done:tested]',requirements:[requirement]}})).structuredContent.decision);
+  await run('fact-check missing evidence veto without provider call','continue',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'[done:tested]',requirements:[requirement],evidenceMode:'fact-check'}})).structuredContent.decision);
   await run('declared failed check','review',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'[done:tested]',requirements:[requirement],evidence:'Synthetic fixture',trustedChecks:[{id:'tests',status:'fail'}]}})).structuredContent.decision);
   await run('complete synthetic fixture','finish',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'[done:tested]',requirements:[requirement],evidence:'Synthetic fixture'}})).structuredContent.decision);
   await run('process call budget exhausted','review',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'[done:tested]',requirements:[requirement],evidence:'Synthetic fixture'}})).structuredContent.decision);

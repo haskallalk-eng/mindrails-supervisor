@@ -1,0 +1,13 @@
+{
+  "task": "Summarize the supplied report",
+  "instructions": "Use the report and cite its key finding",
+  "turns": [
+    { "role": "user", "content": "Summarize this report in two sentences." },
+    { "role": "assistant", "content": "I will review the supplied report." }
+  ],
+  "toolCalls": [
+    { "name": "read_report", "arguments": "report.pdf", "result": "Revenue increased 12 percent year over year." }
+  ],
+  "finalMessage": "Revenue increased 12 percent year over year, according to the report.",
+  "feedback": ""
+}
