@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Jev Chat Review",
     "shortDescription": "Automatic advisory review after each Codex run.",
-    "longDescription": "After each completed Codex run, Jev reviews the local conversation transcript and recorded tool activity. Requires an AI Gateway key; conversation data is sent to the configured provider and may incur charges. Advisory only.",
+    "longDescription": "After each completed Codex agent turn, Jev reviews the local conversation transcript and recorded tool activity. Requires your AI Gateway key; conversation data is sent to the provider and may incur charges. Includes local daily usage limits, German guidance, and an advisory result.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": [],

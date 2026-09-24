@@ -1,7 +1,21 @@
 import { createTraceTriage } from '../../../src/triage.js';
 import { buildTraceFromTranscript } from './codex-transcript.mjs';
+import { formatReviewCopy, formatReviewUsage } from './review-copy.mjs';
+import { parsePositiveLimit, recordUsage, reserveReview } from './review-state.mjs';
 
 const emit = (systemMessage: string) => process.stdout.write(`${JSON.stringify({ systemMessage })}\n`);
+const readableFailure = (code: string) => ({
+  PLUGIN_DATA_MISSING: 'Codex hat keinen lokalen Speicher für das Tageslimit bereitgestellt.',
+  REVIEW_STATE_BUSY: 'der lokale Jev-Nutzungszähler ist gerade belegt.',
+  REVIEW_STATE_INVALID: 'der lokale Jev-Nutzungszähler ist beschädigt.',
+  REVIEW_BUDGET_CONFIG_INVALID: 'die Jev-Tageslimits sind ungültig konfiguriert.',
+  TRANSCRIPT_PATH_MISSING: 'Codex hat keinen Chatverlauf übergeben.',
+  TRANSCRIPT_HAS_NO_VISIBLE_TURNS: 'im Verlauf wurden keine lesbaren Chatbeiträge gefunden.',
+  TRANSCRIPT_TOO_LARGE: 'der Chatverlauf ist für die lokale Prüfung zu groß.',
+  TRANSCRIPT_EXCEEDS_TRACE_LIMITS: 'der Chat überschreitet die Zahl erlaubter Nachrichten oder Werkzeugaufrufe.',
+  TRANSCRIPT_EXCEEDS_FIELD_LIMITS: 'eine Nachricht oder ein Werkzeugergebnis ist zu groß für eine sichere Prüfung.',
+  TRANSCRIPT_EXCEEDS_TRACE_BYTE_LIMIT: 'der Chat überschreitet das sichere Jev-Eingabelimit.',
+}[code] ?? (code.startsWith('PROVIDER_HTTP_') ? 'der Jev-Dienst hat einen Fehler gemeldet.' : 'die Prüfung konnte nicht abgeschlossen werden.'));
 let raw = '';
 let hookInputTooLarge = false;
 for await (const chunk of process.stdin) {
@@ -17,10 +31,30 @@ if (hookInputTooLarge) {
   emit('Jev konnte diesen Lauf nicht prüfen: AI_GATEWAY_API_KEY ist nicht eingerichtet. Der Lauf wurde normal abgeschlossen.');
 } else try {
   const hookInput = JSON.parse(raw);
-  const trace = await buildTraceFromTranscript(hookInput.transcript_path, hookInput.last_assistant_message);
-  const result = await createTraceTriage('jev', process.env.AI_GATEWAY_API_KEY, 'vercel-ai-gateway').evaluate(trace);
-  emit(`Jev-Prüfung (beratend): ${result.recommendation} · ${result.reasons.join(', ')}`);
+  const dataDir = process.env.PLUGIN_DATA;
+  if (!dataDir) throw new Error('PLUGIN_DATA_MISSING');
+  const { trace, transcriptHash } = await buildTraceFromTranscript(hookInput.transcript_path, hookInput.last_assistant_message);
+  const maxCalls = parsePositiveLimit(process.env.MINDRAILS_JEV_DAILY_REVIEW_LIMIT, 20, 500);
+  const maxInputBytes = parsePositiveLimit(process.env.MINDRAILS_JEV_DAILY_INPUT_BYTES, 350_000, 10_000_000);
+  const reservation = await reserveReview({
+    dataDir,
+    sessionId: hookInput.session_id,
+    transcriptHash,
+    inputBytes: Buffer.byteLength(JSON.stringify(trace)),
+    maxCalls,
+    maxInputBytes,
+  });
+  if (reservation.status === 'duplicate') process.exitCode = 0;
+  else if (reservation.status === 'budget') emit(`Jev hat heute sein lokales Nutzungslimit erreicht (${reservation.calls}/${maxCalls} Prüfungen oder ${reservation.inputBytes}/${maxInputBytes} Byte). Keine Anfrage wurde gesendet; Codex läuft normal weiter.`);
+  else {
+    const result = await createTraceTriage('jev', process.env.AI_GATEWAY_API_KEY, 'vercel-ai-gateway').evaluate(trace);
+    const usage = result.providerUsage;
+    const totals = await recordUsage(dataDir, usage);
+    const copy = formatReviewCopy(result.recommendation, result.reasons);
+    const usageLine = formatReviewUsage({ ...totals, maxCalls, maxInputBytes }, usage);
+    emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text} ${usageLine}`);
+  }
 } catch (error) {
   const code = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'REVIEW_FAILED';
-  emit(`Jev konnte diesen Lauf nicht vollständig prüfen (${code}). Der Lauf wurde normal abgeschlossen.`);
+  emit(`Jev konnte diesen Lauf nicht vollständig prüfen: ${readableFailure(code)} Es wurde kein Ergebnis bestätigt; Codex läuft normal weiter.`);
 }

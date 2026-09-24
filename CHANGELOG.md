@@ -2,8 +2,9 @@
 
 ## Unreleased — local Jev calibration update
 
-- Add a Codex plugin preview that automatically sends each completed run's visible transcript and tool activity to Jev for advisory review.
-- Disclose automatic provider transmission and possible charges; add a local opt-out, credential-pattern redaction, and fail-closed trace size limits.
+- Add an automatic Codex turn review with plain-language German guidance and visible provider token usage.
+- Add a persistent per-install daily call/trace-byte budget, duplicate suppression, local usage accounting, and no-transcript-storage state.
+- Disclose repeat transmission of conversation history, provider charges, redaction limits, and the lack of a managed Mindrails inference service.
 - Separate artifact completion from explicit source-backed `fact-check` mode; only fact-check mode hard-gates on supplied evidence.
 - Adjust the initial signal threshold from 0.90 to 0.85 based on the five false continues in the first frozen Jev suite.
 - Re-run the same twelve synthetic cases through Vercel Jev: 12/12 correct, no false finishes, false continues or provider errors; document that this tuned set is not held-out validation.

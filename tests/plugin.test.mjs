@@ -16,7 +16,7 @@ test('Codex plugin automatically reviews completed runs and retains an optional 
   const skill = await readFile(join(plugin, 'skills', 'review-current-chat', 'SKILL.md'), 'utf8');
 
   assert.equal(manifest.name, 'jev-chat-review');
-  assert.match(manifest.interface.longDescription, /After each completed Codex run/);
+  assert.match(manifest.interface.longDescription, /After each completed Codex agent turn/);
   assert.equal(mcp.mcpServers['mindrails-supervisor'].args[0], 'server.mjs');
   assert.deepEqual(mcp.mcpServers['mindrails-supervisor'].env_vars, ['AI_GATEWAY_API_KEY']);
   assert.match(skill, /Do not ask the user to paste the transcript/);

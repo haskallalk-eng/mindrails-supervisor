@@ -1,4 +1,5 @@
 import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -41,7 +42,8 @@ export async function buildTraceFromTranscript(transcriptPath, lastAssistantMess
   let lastUser = '';
   let finalMessage = '';
   const input = createReadStream(transcriptPath, { encoding: 'utf8' });
-  input.on('data', (chunk) => { bytes += Buffer.byteLength(chunk); if (bytes > MAX_FILE_BYTES) input.destroy(new Error('TRANSCRIPT_TOO_LARGE')); });
+  const digest = createHash('sha256');
+  input.on('data', (chunk) => { bytes += Buffer.byteLength(chunk); digest.update(chunk); if (bytes > MAX_FILE_BYTES) input.destroy(new Error('TRANSCRIPT_TOO_LARGE')); });
   const lines = createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line.trim()) continue;
@@ -87,5 +89,5 @@ export async function buildTraceFromTranscript(transcriptPath, lastAssistantMess
     finalMessage: finalMessage || '[no assistant final message recorded]',
   };
   if (Buffer.byteLength(JSON.stringify(trace)) > MAX_TRACE_BYTES) throw new Error('TRANSCRIPT_EXCEEDS_TRACE_BYTE_LIMIT');
-  return trace;
+  return { trace, transcriptHash: digest.digest('hex'), transcriptBytes: bytes };
 }
