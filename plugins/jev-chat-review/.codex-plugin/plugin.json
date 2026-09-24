@@ -9,11 +9,11 @@
   "interface": {
     "displayName": "Jev Chat Review",
     "shortDescription": "Local overview for open Codex chats, plus optional Jev review.",
-    "longDescription": "Open Codex chats can be monitored locally for long-running turns and repeated tool calls, with simple advisory model-fit hints. This monitoring stores only derived signals and makes no AI/API calls. Optional Jev review after completed turns requires your AI Gateway key; chat data is sent to the provider and may incur charges.",
+    "longDescription": "Open Codex chats can be monitored locally for current or completed turn duration and repeated identical tool actions/results. Jev does not guess model fit from prompt length, tool count, or repetition. This monitoring stores only derived signals and makes no AI/API calls. Optional Jev review after completed turns requires your AI Gateway key; chat data is sent to the provider and may incur charges.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "Show me my open Codex chats and any local Jev monitoring suggestions."
+    "defaultPrompt": "Show me my open Codex chats, turn durations, and repeated-action warnings."
   },
   "mcpServers": "./.mcp.json"
 }
