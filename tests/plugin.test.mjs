@@ -66,10 +66,10 @@ test('Codex plugin automatically reviews completed runs and retains an optional 
     const overview = await client.callTool({ name:'open_codex_chats', arguments:{} });
     assert.equal(overview.structuredContent.apiCallsForMonitoring, 0);
     assert.equal(overview.structuredContent.chats[0].project,'api');
-    assert.ok(overview.structuredContent.chats[0].recommendations.some(item => item.includes('kleineres')));
+    assert.equal(overview.structuredContent.chats[0].recommendations.length, 0);
     const notice = spawnSync(process.execPath,[join(plugin,'hooks','monitor-event.mjs')],{input:JSON.stringify({hook_event_name:'Stop',session_id:'visible-session'}),encoding:'utf8',env:{...process.env,PLUGIN_DATA:monitorDir}});
     assert.equal(notice.status,0);
-    assert.match(JSON.parse(notice.stdout).systemMessage,/Jev Chat-Monitor.*kleineres/);
+    assert.doesNotMatch(notice.stdout,/kleineres/);
     const result = await client.callTool({
       name: 'triage_agent_run',
       arguments: {

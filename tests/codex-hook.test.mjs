@@ -86,14 +86,30 @@ test('local chat monitor stores derived data only and flags repeated actions and
   assert.match(saved, /codex-fast/);
 });
 
-test('local monitor only suggests a smaller model for a simple task after the turn ends', async (t) => {
+test('local monitor does not guess model fit from a short prompt and few tools', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'jev-monitor-simple-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const now = Date.now();
   await recordMonitorEvent(dir, { hook_event_name:'UserPromptSubmit', session_id:'small-task', prompt:'What is 2 + 2?' }, now);
   await recordMonitorEvent(dir, { hook_event_name:'Stop', session_id:'small-task' }, now + 1000);
   const view = await readMonitorView(dir, now + 2000);
-  assert.deepEqual(view.chats[0].recommendations.map((item) => item.kind), ['smaller-model']);
+  assert.deepEqual(view.chats[0].recommendations, []);
+  assert.equal(view.chats[0].turnMinutes, 0);
+  assert.equal(view.chats[0].lastTurnMinutes, 0);
+});
+
+test('long completed turns are described as past work, not as a chat still running', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'jev-monitor-finished-long-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const start = Date.parse('2026-09-24T10:00:00.000Z');
+  await recordMonitorEvent(dir, { hook_event_name:'UserPromptSubmit', session_id:'finished-long', prompt:'Please do a task' }, start);
+  await recordMonitorEvent(dir, { hook_event_name:'Stop', session_id:'finished-long' }, start + 12 * 60_000);
+  const view = await readMonitorView(dir, start + 25 * 60_000);
+  assert.equal(view.chats[0].status, 'waiting');
+  assert.equal(view.chats[0].turnMinutes, 0);
+  assert.equal(view.chats[0].lastTurnMinutes, 12);
+  assert.deepEqual(view.chats[0].recommendations.map((item) => item.kind), ['long-turn']);
+  assert.match(view.chats[0].recommendations[0].text, /letzte Durchlauf dauerte 12 Minuten/);
 });
 
 test('review feedback is actionable German and exposes usage without claiming a price', () => {

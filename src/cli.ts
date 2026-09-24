@@ -58,12 +58,12 @@ async function main() {
     const getSupervisor = () => supervisor ??= createSupervisor();
     const getTriage = () => triage ??= createTriage();
     const format = (v:object) => ({content:[{type:'text' as const,text:JSON.stringify(v)}],structuredContent:v as Record<string,unknown>});
-    const formatChatOverview = (view: {activeChats:number;monitoredLocally:boolean;apiCallsForMonitoring:number;chats:Array<{id:string;project:string;model:string;status:string;activeMinutes:number;turnMinutes:number;toolCount:number;recommendations:string[]}>;note?:string}) => {
+    const formatChatOverview = (view: {activeChats:number;monitoredLocally:boolean;apiCallsForMonitoring:number;chats:Array<{id:string;project:string;model:string;status:string;activeMinutes:number;turnMinutes:number;lastTurnMinutes:number|null;toolCount:number;recommendations:string[]}>;note?:string}) => {
       const header = view.monitoredLocally ? `Jev überwacht ${view.activeChats} offene Codex-Chats lokal. Die Überwachung hat 0 API-Aufrufe verwendet.` : 'Die lokale Chat-Überwachung ist in diesem Codex-Host nicht verfügbar.';
-      const rows = view.chats.map(chat => `• ${chat.project} (${chat.id}) — ${chat.model}; ${chat.status}; offen ${chat.activeMinutes} Min.; aktueller Durchlauf ${chat.turnMinutes} Min.; ${chat.toolCount} Tool-Aufrufe${chat.recommendations.length ? `\n  ${chat.recommendations.map(hint => `Hinweis: ${hint}`).join('\n  ')}` : ''}`).join('\n');
+      const rows = view.chats.map(chat => `• ${chat.project} (${chat.id}) — ${chat.model}; ${chat.status}; offen ${chat.activeMinutes} Min.; ${chat.status === 'working' ? `aktueller Durchlauf ${chat.turnMinutes} Min.` : chat.lastTurnMinutes == null ? 'noch kein abgeschlossener Durchlauf' : `letzter Durchlauf ${chat.lastTurnMinutes} Min.`}; ${chat.toolCount} Tool-Aufrufe${chat.recommendations.length ? `\n  ${chat.recommendations.map(hint => `Hinweis: ${hint}`).join('\n  ')}` : ''}`).join('\n');
       return {content:[{type:'text' as const,text:[header,rows,view.note ?? ''].filter(Boolean).join('\n')}],structuredContent:view as Record<string,unknown>};
     };
-    server.registerTool('open_codex_chats', {description:'Show locally monitored Codex chats, running time, possible repeated tool calls, and cautious model-fit hints. Monitoring stores no conversation text and makes no AI/API calls. Model-fit hints are simple heuristics, not a model benchmark.', inputSchema:{}}, async () => {
+    server.registerTool('open_codex_chats', {description:'Show locally monitored Codex chats, current or last-turn duration, and exact repeated tool-call warnings. Monitoring stores no conversation text and makes no AI/API calls. It does not guess model fit from prompt length or tool count.', inputSchema:{}}, async () => {
       try {
         const dataDir = process.env.PLUGIN_DATA;
         if (!dataDir) return formatChatOverview({activeChats:0,monitoredLocally:false,apiCallsForMonitoring:0,chats:[],note:'Plugin-local storage is not available in this host.'});
@@ -74,11 +74,11 @@ async function main() {
           const actions = Array.isArray(s.actions) ? s.actions.slice(-6) : [];
           const hints: string[] = [];
           const started = Date.parse(s.turnStartedAt ?? '');
-          if (s.status === 'working' && Number.isFinite(started) && now - started >= 10 * 60 * 1000) hints.push('Dieser Durchlauf läuft seit über 10 Minuten. Prüfe, ob er noch Fortschritt macht.');
+          if (s.status === 'working' && Number.isFinite(started) && now - started >= 10 * 60 * 1000) hints.push('Dieser Durchlauf läuft seit über 10 Minuten. Prüfe den letzten sichtbaren Fortschritt und gib bei Bedarf einen klaren nächsten Schritt.');
+          else if (s.status === 'waiting' && s.lastTurnMs >= 10 * 60 * 1000) hints.push(`Der letzte Durchlauf dauerte ${Math.floor(s.lastTurnMs / 60000)} Minuten. Prüfe, ob du den Auftrag künftig in klare Zwischenziele teilen möchtest.`);
           if (actions.length >= 3 && actions.slice(-3).every((a: any) => a.signature === actions.at(-1)?.signature)) hints.push('Die letzten drei Tool-Aufrufe wiederholen dieselbe Aktion. Prüfe Ergebnis und ändere den Ansatz.');
-          if ((s.loopCount ?? 0) >= 2) hints.push('Mehrere Wiederholungen erkannt. Ein stärkeres Modell könnte helfen; alternativ den Auftrag in kleinere Schritte teilen.');
-          else if (s.taskComplexity === 'simple' && (s.toolCount ?? 0) <= 1 && s.status !== 'working') hints.push('Der Auftrag wirkte einfach und brauchte kaum Werkzeuge. Für ähnliche Aufgaben könnte ein kleineres, schnelleres Modell reichen.');
-          return {id:String(s.id).slice(0,8),project:s.project ?? 'Codex',model:s.model || 'unbekannt',status:s.status,activeMinutes:Math.max(0,Math.floor((now-Date.parse(s.startedAt))/60000)),turnMinutes:Number.isFinite(started)?Math.max(0,Math.floor((now-started)/60000)):0,toolCount:s.toolCount ?? 0,recommendations:hints};
+          if ((s.loopCount ?? 0) >= 2) hints.push('Dieselbe Tool-Aktion mit demselben Ergebnis wiederholte sich mehrfach. Ändere zuerst den Ansatz; Wiederholung allein belegt nicht, dass ein anderes Modell hilft.');
+          return {id:String(s.id).slice(0,8),project:s.project ?? 'Codex',model:s.model || 'unbekannt',status:s.status,activeMinutes:Math.max(0,Math.floor((now-Date.parse(s.startedAt))/60000)),turnMinutes:s.status === 'working' && Number.isFinite(started)?Math.max(0,Math.floor((now-started)/60000)):0,lastTurnMinutes:s.lastTurnMs == null ? null : Math.floor(s.lastTurnMs / 60000),toolCount:s.toolCount ?? 0,recommendations:hints};
         });
         return formatChatOverview({activeChats:chats.length,monitoredLocally:true,apiCallsForMonitoring:0,chats});
       } catch (error) {

@@ -49,30 +49,20 @@ async function withLock(dataDir, operation) {
   }
 }
 
-function promptComplexity(prompt) {
-  const text = typeof prompt === 'string' ? prompt : '';
-  const signals = [
-    text.length > 700,
-    /\b(refactor|architecture|migrate|debug|investigate|implement|multiple|several|across|security|performance)\b/i.test(text),
-    /\b(test|tests|build|deploy|database|api|integration|repository|codebase)\b/i.test(text),
-    (text.match(/\n/g) ?? []).length >= 4,
-  ].filter(Boolean).length;
-  return signals >= 2 ? 'complex' : text.length > 0 && text.length < 180 && signals === 0 ? 'simple' : 'unknown';
-}
-
 function recommendations(session, now = Date.now()) {
   const result = [];
-  if (session.turnStartedAt && ['working','waiting'].includes(session.status) && now - Date.parse(session.turnStartedAt) >= LONG_TURN_MS) {
-    result.push({ kind: 'long-running', text: 'Dieser Durchlauf läuft seit über 10 Minuten. Prüfe, ob der Chat noch Fortschritt macht oder einen klaren Zwischenauftrag braucht.' });
+  const liveTurnMs = session.turnStartedAt ? now - Date.parse(session.turnStartedAt) : 0;
+  if (session.status === 'working' && liveTurnMs >= LONG_TURN_MS) {
+    result.push({ kind: 'long-running', text: 'Dieser Durchlauf läuft seit über 10 Minuten. Prüfe den letzten sichtbaren Fortschritt und gib bei Bedarf einen klaren nächsten Schritt.' });
+  } else if (session.status === 'waiting' && session.lastTurnMs >= LONG_TURN_MS) {
+    result.push({ kind: 'long-turn', text: `Der letzte Durchlauf dauerte ${Math.floor(session.lastTurnMs / 60_000)} Minuten. Prüfe, ob du den Auftrag künftig in klare Zwischenziele teilen möchtest.` });
   }
   const recent = session.actions.slice(-6);
   if (recent.length >= 3 && recent.slice(-3).every((a) => a.signature === recent.at(-1).signature)) {
     result.push({ kind: 'possible-loop', text: 'Die letzten drei Tool-Aufrufe wiederholen dieselbe Aktion. Prüfe Ergebnis und ändere den Ansatz, bevor der Chat weiterläuft.' });
   }
   if (session.loopCount >= 2) {
-    result.push({ kind: 'stronger-model', text: 'Mehrere wiederholte Aktionen erkannt. Ein stärkeres Modell könnte helfen; prüfe zuerst, ob der Auftrag in kleinere Schritte zerlegt werden sollte.' });
-  } else if (session.taskComplexity === 'simple' && session.toolCount <= 1 && session.status !== 'working') {
-    result.push({ kind: 'smaller-model', text: 'Der Auftrag wirkt einfach und brauchte kaum Werkzeuge. Bei ähnlichen Aufgaben könnte ein kleineres, schnelleres Modell reichen.' });
+    result.push({ kind: 'repeated-stagnation', text: 'Dieselbe Tool-Aktion mit demselben Ergebnis wiederholte sich mehrfach. Ändere zuerst den Ansatz; Wiederholung allein belegt nicht, dass ein anderes Modell hilft.' });
   }
   return result;
 }
@@ -87,6 +77,7 @@ export function buildMonitorView(state, now = Date.now()) {
       status: session.status,
       activeMinutes: Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 60_000)),
       turnMinutes: session.turnStartedAt ? Math.max(0, Math.floor((now - Date.parse(session.turnStartedAt)) / 60_000)) : 0,
+      lastTurnMinutes: session.lastTurnMs == null ? null : Math.floor(session.lastTurnMs / 60_000),
       toolCount: session.toolCount,
       recommendations: recommendations(session, now),
     }));
@@ -102,7 +93,7 @@ export async function recordMonitorEvent(dataDir, event = {}, now = Date.now()) 
     let session = state.sessions.find((candidate) => candidate.id === id);
     const stamp = new Date(now).toISOString();
     if (!session) {
-      session = { id, project: basename(String(event.cwd ?? '').replace(/[\\/]+$/, '')) || 'Codex', model: '', startedAt: stamp, updatedAt: stamp, status: 'idle', turnStartedAt: null, taskComplexity: 'unknown', toolCount: 0, loopCount: 0, actions: [] };
+      session = { id, project: basename(String(event.cwd ?? '').replace(/[\\/]+$/, '')) || 'Codex', model: '', startedAt: stamp, updatedAt: stamp, status: 'idle', turnStartedAt: null, lastTurnMs: null, toolCount: 0, loopCount: 0, actions: [] };
       state.sessions.push(session);
     }
     session.updatedAt = stamp;
@@ -111,7 +102,7 @@ export async function recordMonitorEvent(dataDir, event = {}, now = Date.now()) 
     if (eventName === 'userpromptsubmit') {
       session.status = 'working';
       session.turnStartedAt = stamp;
-      session.taskComplexity = promptComplexity(event.prompt);
+      session.lastTurnMs = null;
       session.toolCount = 0;
       session.loopCount = 0;
       session.actions = [];
@@ -126,7 +117,11 @@ export async function recordMonitorEvent(dataDir, event = {}, now = Date.now()) 
       session.actions = session.actions.slice(-10);
       if (session.actions.length >= 3 && session.actions.slice(-3).every((action) => action.signature === session.actions.at(-1).signature)) session.loopCount++;
     }
-    if (eventName === 'stop') session.status = 'waiting';
+    if (eventName === 'stop') {
+      if (session.turnStartedAt) session.lastTurnMs = Math.max(0, now - Date.parse(session.turnStartedAt));
+      session.turnStartedAt = null;
+      session.status = 'waiting';
+    }
     if (eventName === 'sessionend') { session.status = 'ended'; session.turnStartedAt = null; }
     return { skipped: false, status: session.status, recommendations: recommendations(session, now).map((item) => item.text) };
   });
