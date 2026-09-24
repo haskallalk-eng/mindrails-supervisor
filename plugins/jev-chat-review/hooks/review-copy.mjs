@@ -35,3 +35,16 @@ export function formatReviewUsage({ calls, maxCalls, inputBytes, maxInputBytes, 
     : 'Tokenverbrauch dieser Prüfung ist nicht verfügbar.';
   return `${perReview} Heute: ${inputTokens} Eingabe- und ${outputTokens} Ausgabe-Tokens; ${calls}/${maxCalls} Prüfungen und ${inputBytes}/${maxInputBytes} Byte Trace-Budget.`;
 }
+
+export function formatModelRecommendation(recommendation) {
+  if (!recommendation) return '';
+  const confidence = `${Math.round(recommendation.confidence * 100)}%`;
+  const text = {
+    keep_current: `Jev hält das aktuelle Modell (${recommendation.currentModel}) für passend.`,
+    try_more_capable: `Jev empfiehlt, für ähnliche Aufgaben ein stärkeres Modell zu testen.`,
+    try_faster: 'Jev empfiehlt, für ähnliche risikoarme Aufgaben ein schnelleres Modell zu testen; Kosteneinsparungen sind nicht gemessen.',
+    uncertain: 'Jev ist bei der Modellpassung unsicher und empfiehlt vorerst keinen Wechsel.',
+  }[recommendation.action] ?? 'Jev konnte keine Modellpassung bestimmen.';
+  const basis = recommendation.basis?.slice(0, 4).join(' ');
+  return `Modellhinweis (${confidence}): ${text}${basis ? ` Belege: ${basis}` : ''}`;
+}

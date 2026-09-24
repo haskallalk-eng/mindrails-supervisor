@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { recordMonitorEvent } from '../plugins/jev-chat-review/hooks/monitor-state.mjs';
+import { recordMonitorEvent, recordMonitorUsage } from '../plugins/jev-chat-review/hooks/monitor-state.mjs';
 
 const root = process.cwd();
 const plugin = join(root, 'plugins', 'jev-chat-review');
@@ -50,6 +50,7 @@ test('Codex plugin automatically reviews completed runs and retains an optional 
     const now=Date.now();
     await recordMonitorEvent(monitorDir,{hook_event_name:'UserPromptSubmit',session_id:'visible-session',cwd:'C:\\work\\api',model:'fast',prompt:'Fix a typo'},now);
     await recordMonitorEvent(monitorDir,{hook_event_name:'Stop',session_id:'visible-session'},now+1000);
+    await recordMonitorUsage(monitorDir,'visible-session',{inputTokens:12000,cachedInputTokens:8000,outputTokens:200,reasoningOutputTokens:20,totalTokens:12220,contextWindow:200000},{primaryUsedPercent:31,secondaryUsedPercent:18});
   } finally { /* keep the fixture until the MCP child has read it */ }
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -66,6 +67,8 @@ test('Codex plugin automatically reviews completed runs and retains an optional 
     const overview = await client.callTool({ name:'open_codex_chats', arguments:{} });
     assert.equal(overview.structuredContent.apiCallsForMonitoring, 0);
     assert.equal(overview.structuredContent.chats[0].project,'api');
+    assert.equal(overview.structuredContent.chats[0].latestUsage.totalTokens,12220);
+    assert.match(overview.content[0].text,/12\.220 Token/);
     assert.equal(overview.structuredContent.chats[0].recommendations.length, 0);
     const notice = spawnSync(process.execPath,[join(plugin,'hooks','monitor-event.mjs')],{input:JSON.stringify({hook_event_name:'Stop',session_id:'visible-session'}),encoding:'utf8',env:{...process.env,PLUGIN_DATA:monitorDir}});
     assert.equal(notice.status,0);

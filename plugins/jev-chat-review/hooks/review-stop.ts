@@ -1,7 +1,8 @@
 import { createTraceTriage } from '../../../src/triage.js';
 import { buildTraceFromTranscript } from './codex-transcript.mjs';
-import { formatReviewCopy, formatReviewUsage } from './review-copy.mjs';
+import { formatReviewCopy, formatReviewUsage, formatModelRecommendation } from './review-copy.mjs';
 import { parsePositiveLimit, recordUsage, reserveReview } from './review-state.mjs';
+import { readMonitorSession, recordMonitorUsage } from './monitor-state.mjs';
 
 const emit = (systemMessage: string) => process.stdout.write(`${JSON.stringify({ systemMessage })}\n`);
 const readableFailure = (code: string) => ({
@@ -33,7 +34,16 @@ if (hookInputTooLarge) {
   const hookInput = JSON.parse(raw);
   const dataDir = process.env.PLUGIN_DATA;
   if (!dataDir) throw new Error('PLUGIN_DATA_MISSING');
-  const { trace, transcriptHash } = await buildTraceFromTranscript(hookInput.transcript_path, hookInput.last_assistant_message);
+  const { trace, transcriptHash, tokenUsage, rateLimits } = await buildTraceFromTranscript(hookInput.transcript_path, hookInput.last_assistant_message);
+  const observed = await readMonitorSession(dataDir, hookInput.session_id);
+  await recordMonitorUsage(dataDir, hookInput.session_id, tokenUsage, rateLimits);
+  const currentModel=observed?.currentModel ?? (typeof hookInput.model==='string' && hookInput.model.length<=100 ? hookInput.model : null);
+  if (observed || currentModel || tokenUsage || rateLimits) trace.telemetry = {
+    ...(currentModel ? { currentModel } : {}),
+    ...(observed ? { toolCount: observed.toolCount, repeatedActions: observed.repeatedActions } : {}),
+    ...(tokenUsage ? { latestUsage: tokenUsage } : {}),
+    ...(rateLimits ? { rateLimits } : {}),
+  };
   const maxCalls = parsePositiveLimit(process.env.MINDRAILS_JEV_DAILY_REVIEW_LIMIT, 20, 500);
   const maxInputBytes = parsePositiveLimit(process.env.MINDRAILS_JEV_DAILY_INPUT_BYTES, 350_000, 10_000_000);
   const reservation = await reserveReview({
@@ -52,7 +62,8 @@ if (hookInputTooLarge) {
     const totals = await recordUsage(dataDir, usage);
     const copy = formatReviewCopy(result.recommendation, result.reasons);
     const usageLine = formatReviewUsage({ ...totals, maxCalls, maxInputBytes }, usage);
-    emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text} ${usageLine}`);
+    const modelLine=formatModelRecommendation(result.modelRecommendation);
+    emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text}${modelLine ? ` ${modelLine}` : ''} ${usageLine}`);
   }
 } catch (error) {
   const code = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'REVIEW_FAILED';

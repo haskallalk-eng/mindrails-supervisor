@@ -1,5 +1,5 @@
 import { SafeError } from './core.js';
-import { type TraceLabels, type TraceQuestionId, type TraceTriageInput, traceQuestions, traceTriageSchema } from './trace.js';
+import { type TraceLabels, type TraceQuestionId, type TraceTriageInput, traceQuestions, traceTriageSchema, modelFitChoices } from './trace.js';
 import { JevProvider, MockProvider } from './providers.js';
 
 export interface TraceTriageProvider {
@@ -16,7 +16,27 @@ export type TraceTriageResult = {
   synthetic: boolean;
   labels?: TraceLabels;
   providerUsage?: { inputTokens:number; outputTokens:number };
+  modelRecommendation?: { currentModel:string; action:'keep_current'|'try_more_capable'|'try_faster'|'uncertain'; confidence:number; basis:string[] };
 };
+
+function modelRecommendation(input:TraceTriageInput, labels:TraceLabels):TraceTriageResult['modelRecommendation'] {
+  const currentModel=input.telemetry?.currentModel;
+  if(!currentModel) return undefined;
+  const label=labels.model_fit;
+  if(!label || !Object.hasOwn(modelFitChoices,label.choice) || !Number.isFinite(label.confidence) || label.confidence<0 || label.confidence>1 || Object.keys(label.probabilities).length!==Object.keys(modelFitChoices).length || Object.keys(modelFitChoices).some(key=>!Number.isFinite(label.probabilities[key]) || label.probabilities[key]!<0 || label.probabilities[key]!>1) || Math.abs(Object.values(label.probabilities).reduce((a,b)=>a+b,0)-1)>0.03 || Math.abs(label.probabilities[label.choice]!-Math.max(...Object.values(label.probabilities)))>0.0001) throw new SafeError('INVALID_PROVIDER_RESPONSE');
+  const confidence=label.confidence;
+  const action=confidence<0.65 || label.probabilities[label.choice]!<0.75 ? 'uncertain' : label.choice as 'keep_current'|'try_more_capable'|'try_faster'|'uncertain';
+  const basis=[`Jev hat ${input.turns.length} sichtbare Chatbeiträge und ${input.toolCalls.length} Werkzeugaufrufe erhalten.`];
+  const usage=input.telemetry?.latestUsage;
+  if(usage?.contextWindow && usage.totalTokens) basis.push(`Letzte Anfrage: ${usage.totalTokens.toLocaleString('de-DE')} von ${usage.contextWindow.toLocaleString('de-DE')} Kontext-Tokens (${Math.round(usage.totalTokens/usage.contextWindow*100)}%).`);
+  if(input.telemetry?.rateLimits?.primaryUsedPercent!=null) basis.push(`Codex-Hauptlimit: ${Math.round(input.telemetry.rateLimits.primaryUsedPercent)}% verbraucht.`);
+  const signatures=input.toolCalls.map(call=>`${call.name}\0${call.arguments}\0${call.result}`);
+  const repeated=signatures.length-new Set(signatures).size;
+  if(repeated) basis.push(`${repeated} exakt wiederholte Werkzeugaufrufe mit gleichem Ergebnis.`);
+  const actionText={keep_current:'Jev hält das aktuelle Modell für vergleichbare Aufgaben für passend.',try_more_capable:'Jev sieht Hinweise auf eine mögliche Fähigkeitsgrenze und empfiehlt, bei ähnlichen Aufgaben ein stärkeres Modell zu testen.',try_faster:'Jev hält einen vorsichtigen Test mit einem schnelleren Modell bei ähnlich risikoarmen Aufgaben für sinnvoll; Einsparungen wurden nicht gemessen.',uncertain:'Jev hat nicht genug Belege für einen Modellwechsel.'}[action];
+  basis.unshift(actionText);
+  return {currentModel,action,confidence,basis};
+}
 
 function pickRecommendation(input: TraceTriageInput, labels: TraceLabels): { recommendation:TraceTriageResult['recommendation']; reasons:string[] } {
   if (input.actions?.some(action => action.performed && !action.permitted)) return { recommendation:'ROUTE_PAGE_ON_CALL', reasons:['CALLER_REPORTED_UNPERMITTED_ACTION'] };
@@ -49,9 +69,10 @@ export class TraceTriage {
         const label = labels[id], options = Object.keys(traceQuestions[id]);
         if (!label || !options.includes(label.choice) || !Number.isFinite(label.confidence) || label.confidence < 0 || label.confidence > 1 || Object.keys(label.probabilities).length !== options.length || options.some(option => !Number.isFinite(label.probabilities[option]) || label.probabilities[option]! < 0 || label.probabilities[option]! > 1) || Math.abs(options.reduce((sum,option)=>sum+label.probabilities[option]!,0)-1) > 0.03 || Math.abs(label.probabilities[label.choice]!-Math.max(...options.map(option=>label.probabilities[option]!))) > 0.0001) throw new SafeError('INVALID_PROVIDER_RESPONSE');
       }
+      const modelFit=modelRecommendation(input,labels);
       const {usage,...cleanLabels}=labels;
       const selected = pickRecommendation(input,cleanLabels);
-      return { ...base,...selected,labels:cleanLabels,...(usage ? {providerUsage:usage} : {}) };
+      return { ...base,...selected,labels:cleanLabels,...(usage ? {providerUsage:usage} : {}),...(modelFit ? {modelRecommendation:modelFit} : {}) };
     } catch (error) {
       return { ...base,recommendation:'HUMAN_REVIEW',reasons:[error instanceof SafeError ? error.code : 'PROVIDER_FAILURE'] };
     } finally { clearTimeout(timer); controller.abort(); }

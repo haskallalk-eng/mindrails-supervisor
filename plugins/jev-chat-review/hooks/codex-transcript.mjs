@@ -32,6 +32,41 @@ function payloadOf(record) {
   return null;
 }
 
+function readTokenUsagePayload(payload) {
+  const info=payload?.info;
+  const last=info?.last_token_usage;
+  const int=(value)=>Number.isSafeInteger(value)&&value>=0?value:0;
+  const tokenUsage=last&&typeof last==='object'?{
+    inputTokens:int(last.input_tokens),cachedInputTokens:int(last.cached_input_tokens),
+    outputTokens:int(last.output_tokens),reasoningOutputTokens:int(last.reasoning_output_tokens),
+    totalTokens:int(last.total_tokens),contextWindow:int(info.model_context_window)||null,
+  }:null;
+  const primary=payload?.rate_limits?.primary?.used_percent,secondary=payload?.rate_limits?.secondary?.used_percent;
+  const rateLimits=payload?.rate_limits?{
+    primaryUsedPercent:Number.isFinite(primary)&&primary>=0&&primary<=100?primary:null,
+    secondaryUsedPercent:Number.isFinite(secondary)&&secondary>=0&&secondary<=100?secondary:null,
+  }:null;
+  return {tokenUsage,rateLimits};
+}
+
+export async function readLatestTokenTelemetry(transcriptPath) {
+  if(!transcriptPath||typeof transcriptPath!=='string') return {tokenUsage:null,rateLimits:null};
+  let bytes=0,tokenUsage=null,rateLimits=null;
+  const input=createReadStream(transcriptPath,{encoding:'utf8'});
+  input.on('data',chunk=>{bytes+=Buffer.byteLength(chunk);if(bytes>MAX_FILE_BYTES)input.destroy(new Error('TRANSCRIPT_TOO_LARGE'));});
+  const lines=createInterface({input,crlfDelay:Infinity});
+  for await(const line of lines) {
+    if(!line.trim()) continue;
+    let record;try{record=JSON.parse(line);}catch{continue;}
+    const payload=payloadOf(record);
+    if(payload?.type!=='token_count') continue;
+    const latest=readTokenUsagePayload(payload);
+    if(latest.tokenUsage) tokenUsage=latest.tokenUsage;
+    if(latest.rateLimits) rateLimits=latest.rateLimits;
+  }
+  return {tokenUsage,rateLimits};
+}
+
 export async function buildTraceFromTranscript(transcriptPath, lastAssistantMessage = '') {
   if (!transcriptPath || typeof transcriptPath !== 'string') throw new Error('TRANSCRIPT_PATH_MISSING');
   const turns = [];
@@ -41,6 +76,8 @@ export async function buildTraceFromTranscript(transcriptPath, lastAssistantMess
   let task = '';
   let lastUser = '';
   let finalMessage = '';
+  let tokenUsage = null;
+  let rateLimits = null;
   const input = createReadStream(transcriptPath, { encoding: 'utf8' });
   const digest = createHash('sha256');
   input.on('data', (chunk) => { bytes += Buffer.byteLength(chunk); digest.update(chunk); if (bytes > MAX_FILE_BYTES) input.destroy(new Error('TRANSCRIPT_TOO_LARGE')); });
@@ -52,6 +89,12 @@ export async function buildTraceFromTranscript(transcriptPath, lastAssistantMess
     const payload = payloadOf(record);
     if (!payload || typeof payload !== 'object') continue;
     const type = String(payload.type ?? '');
+    if (type === 'token_count') {
+      const latest=readTokenUsagePayload(payload);
+      if(latest.tokenUsage) tokenUsage=latest.tokenUsage;
+      if(latest.rateLimits) rateLimits=latest.rateLimits;
+      continue;
+    }
     if (type === 'message' || type === 'user_message') {
       const role = payload.role === 'user' || type === 'user_message' ? 'user' : payload.role === 'assistant' ? 'assistant' : '';
       if (!role) continue; // Ignore system/developer messages and hidden reasoning.
@@ -87,7 +130,8 @@ export async function buildTraceFromTranscript(transcriptPath, lastAssistantMess
     turns,
     toolCalls,
     finalMessage: finalMessage || '[no assistant final message recorded]',
+    ...(tokenUsage ? { telemetry: { latestUsage: tokenUsage, ...(rateLimits ? { rateLimits } : {}) } } : {}),
   };
   if (Buffer.byteLength(JSON.stringify(trace)) > MAX_TRACE_BYTES) throw new Error('TRANSCRIPT_EXCEEDS_TRACE_BYTE_LIMIT');
-  return { trace, transcriptHash: digest.digest('hex'), transcriptBytes: bytes };
+  return { trace, transcriptHash: digest.digest('hex'), transcriptBytes: bytes, tokenUsage, rateLimits };
 }

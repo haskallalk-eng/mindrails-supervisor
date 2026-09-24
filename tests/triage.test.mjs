@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TraceTriage } from '../dist/triage.js';
 import { JevProvider, MockProvider } from '../dist/providers.js';
+import { modelFitChoices } from '../dist/trace.js';
 
 const input={task:'Summarize the report',instructions:'Use the supplied report only',turns:[{role:'user',content:'Please summarize.'}],toolCalls:[],finalMessage:'The report says revenue increased.'};
 const labels=(task='complete',user='no_feedback',health='healthy')=>{
@@ -36,6 +37,21 @@ test('uncertainty and weak confidence require review',async()=>{
   const weak=labels(); weak.run_health.confidence=.6;
   assert.equal((await new TraceTriage(provider(weak)).evaluate(input)).recommendation,'HUMAN_REVIEW');
 });
+test('full-context model advice recommends a capability change separately from task triage',async()=>{
+  const telemetry={currentModel:'codex-balanced',toolCount:9,repeatedActions:0,latestUsage:{inputTokens:190000,cachedInputTokens:150000,outputTokens:900,reasoningOutputTokens:300,totalTokens:191200,contextWindow:200000},rateLimits:{primaryUsedPercent:70,secondaryUsedPercent:42}};
+  const modelFit={choice:'try_more_capable',confidence:.92,probabilities:Object.fromEntries(Object.keys(modelFitChoices).map(key=>[key,key==='try_more_capable'?.92:.0267]))};
+  const result=await new TraceTriage(provider({...labels(),model_fit:modelFit})).evaluate({...input,turns:[...input.turns,{role:'assistant',content:'Retrying the same failed implementation.'}],telemetry});
+  assert.equal(result.recommendation,'AUTO_CLOSE');
+  assert.equal(result.modelRecommendation.action,'try_more_capable');
+  assert.equal(result.modelRecommendation.currentModel,'codex-balanced');
+  assert.ok(result.modelRecommendation.basis.some(item=>item.includes('96%')));
+});
+test('model advice fails closed to uncertain when confidence is low',async()=>{
+  const telemetry={currentModel:'codex-balanced'};
+  const modelFit={choice:'try_faster',confidence:.4,probabilities:{keep_current:.1,try_more_capable:.2,try_faster:.4,uncertain:.3}};
+  const result=await new TraceTriage(provider({...labels(),model_fit:modelFit})).evaluate({...input,telemetry});
+  assert.equal(result.modelRecommendation.action,'uncertain');
+});
 test('malformed probabilities fail closed',async()=>{
   const malformed=labels(); malformed.task_outcome.probabilities.complete=.3;
   const result=await new TraceTriage(provider(malformed)).evaluate(input);
@@ -58,6 +74,20 @@ test('Jev choice contract uses the fixed Vercel route, exact questions and repor
   const body=JSON.parse(request.options.body); assert.deepEqual(Object.keys(body.questions).sort(),['run_health','task_outcome','user_outcome']);
   assert.match(body.questions.task_outcome.instructions,/untrusted data/);
   assert.equal(result.recommendation,'AUTO_CLOSE'); assert.deepEqual(result.providerUsage,{inputTokens:91,outputTokens:12});
+});
+test('Jev evaluates model fit using full trace and Codex telemetry in the same request',async()=>{
+  let request;
+  const choices=labels();
+  const modelFit={choice:'keep_current',confidence:.91,probabilities:{keep_current:.91,try_more_capable:.03,try_faster:.03,uncertain:.03}};
+  const answers={...Object.fromEntries(Object.entries(choices).map(([id,value])=>[id,{type:'choice',...value}])),model_fit:{type:'choice',...modelFit}};
+  const telemetry={currentModel:'codex-balanced',toolCount:4,repeatedActions:0,latestUsage:{inputTokens:70000,cachedInputTokens:50000,outputTokens:400,reasoningOutputTokens:100,totalTokens:70500,contextWindow:200000},rateLimits:{primaryUsedPercent:35,secondaryUsedPercent:20}};
+  const result=await new TraceTriage(new JevProvider('synthetic-test-key',async(url,options)=>{request={url,options};return new Response(JSON.stringify({model:'typesafe-ai/jev',answers,usage:{input_tokens:1600,output_tokens:80}}));},'vercel-ai-gateway')).evaluate({...input,telemetry});
+  const body=JSON.parse(request.options.body);
+  assert.ok(body.state.turns.some(turn=>turn.content==='Please summarize.'));
+  assert.equal(body.state.telemetry.latestUsage.totalTokens,70500);
+  assert.ok(body.questions.model_fit);
+  assert.match(body.questions.model_fit.instructions,/entire ordered transcript/);
+  assert.equal(result.modelRecommendation.action,'keep_current');
 });
 test('Jev wrong model or incomplete answers fail closed',async()=>{
   const choices=labels(), answers=Object.fromEntries(Object.entries(choices).map(([id,value])=>[id,{type:'choice',...value}]));

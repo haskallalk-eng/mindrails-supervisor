@@ -8,8 +8,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Jev Chat Review",
-    "shortDescription": "Local overview for open Codex chats, plus optional Jev review.",
-    "longDescription": "Open Codex chats can be monitored locally for current or completed turn duration and repeated identical tool actions/results. Jev does not guess model fit from prompt length, tool count, or repetition. This monitoring stores only derived signals and makes no AI/API calls. Optional Jev review after completed turns requires your AI Gateway key; chat data is sent to the provider and may incur charges.",
+    "shortDescription": "Multi-chat Codex monitor with Jev model-fit advice.",
+    "longDescription": "Open Codex chats can be monitored locally for current or completed turn duration, repeated identical tool actions/results, and latest token/context usage. At turn end, optional Jev review weighs the bounded visible transcript and local usage evidence to advise whether to keep the current model, try a more capable or faster model, or stay uncertain. Advice is confidence-rated and never changes your model. Monitoring stores only derived signals and makes no AI/API calls. Optional Jev review requires your AI Gateway key; chat data is sent to the provider and may incur charges.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": [],

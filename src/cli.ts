@@ -58,9 +58,13 @@ async function main() {
     const getSupervisor = () => supervisor ??= createSupervisor();
     const getTriage = () => triage ??= createTriage();
     const format = (v:object) => ({content:[{type:'text' as const,text:JSON.stringify(v)}],structuredContent:v as Record<string,unknown>});
-    const formatChatOverview = (view: {activeChats:number;monitoredLocally:boolean;apiCallsForMonitoring:number;chats:Array<{id:string;project:string;model:string;status:string;activeMinutes:number;turnMinutes:number;lastTurnMinutes:number|null;toolCount:number;recommendations:string[]}>;note?:string}) => {
+    const formatChatOverview = (view: {activeChats:number;monitoredLocally:boolean;apiCallsForMonitoring:number;chats:Array<{id:string;project:string;model:string;status:string;activeMinutes:number;turnMinutes:number;lastTurnMinutes:number|null;toolCount:number;latestUsage?:{totalTokens:number;contextWindow:number|null}|null;rateLimits?:{primaryUsedPercent:number|null;secondaryUsedPercent:number|null}|null;recommendations:string[]}>;note?:string}) => {
       const header = view.monitoredLocally ? `Jev überwacht ${view.activeChats} offene Codex-Chats lokal. Die Überwachung hat 0 API-Aufrufe verwendet.` : 'Die lokale Chat-Überwachung ist in diesem Codex-Host nicht verfügbar.';
-      const rows = view.chats.map(chat => `• ${chat.project} (${chat.id}) — ${chat.model}; ${chat.status}; offen ${chat.activeMinutes} Min.; ${chat.status === 'working' ? `aktueller Durchlauf ${chat.turnMinutes} Min.` : chat.lastTurnMinutes == null ? 'noch kein abgeschlossener Durchlauf' : `letzter Durchlauf ${chat.lastTurnMinutes} Min.`}; ${chat.toolCount} Tool-Aufrufe${chat.recommendations.length ? `\n  ${chat.recommendations.map(hint => `Hinweis: ${hint}`).join('\n  ')}` : ''}`).join('\n');
+      const rows = view.chats.map(chat => {
+        const usage=chat.latestUsage ? `letzte Anfrage ${chat.latestUsage.totalTokens.toLocaleString('de-DE')} Token${chat.latestUsage.contextWindow ? ` / ${chat.latestUsage.contextWindow.toLocaleString('de-DE')} Kontextfenster` : ''}` : 'Tokenkontext nicht verfügbar';
+        const limits=chat.rateLimits?.primaryUsedPercent!=null ? `; Codex-Hauptlimit ${Math.round(chat.rateLimits.primaryUsedPercent)}%` : '';
+        return `• ${chat.project} (${chat.id}) — ${chat.model}; ${chat.status}; offen ${chat.activeMinutes} Min.; ${chat.status === 'working' ? `aktueller Durchlauf ${chat.turnMinutes} Min.` : chat.lastTurnMinutes == null ? 'noch kein abgeschlossener Durchlauf' : `letzter Durchlauf ${chat.lastTurnMinutes} Min.`}; ${chat.toolCount} Tool-Aufrufe; ${usage}${limits}${chat.recommendations.length ? `\n  ${chat.recommendations.map(hint => `Hinweis: ${hint}`).join('\n  ')}` : ''}`;
+      }).join('\n');
       return {content:[{type:'text' as const,text:[header,rows,view.note ?? ''].filter(Boolean).join('\n')}],structuredContent:view as Record<string,unknown>};
     };
     server.registerTool('open_codex_chats', {description:'Show locally monitored Codex chats, current or last-turn duration, and exact repeated tool-call warnings. Monitoring stores no conversation text and makes no AI/API calls. It does not guess model fit from prompt length or tool count.', inputSchema:{}}, async () => {
@@ -78,7 +82,7 @@ async function main() {
           else if (s.status === 'waiting' && s.lastTurnMs >= 10 * 60 * 1000) hints.push(`Der letzte Durchlauf dauerte ${Math.floor(s.lastTurnMs / 60000)} Minuten. Prüfe, ob du den Auftrag künftig in klare Zwischenziele teilen möchtest.`);
           if (actions.length >= 3 && actions.slice(-3).every((a: any) => a.signature === actions.at(-1)?.signature)) hints.push('Die letzten drei Tool-Aufrufe wiederholen dieselbe Aktion. Prüfe Ergebnis und ändere den Ansatz.');
           if ((s.loopCount ?? 0) >= 2) hints.push('Dieselbe Tool-Aktion mit demselben Ergebnis wiederholte sich mehrfach. Ändere zuerst den Ansatz; Wiederholung allein belegt nicht, dass ein anderes Modell hilft.');
-          return {id:String(s.id).slice(0,8),project:s.project ?? 'Codex',model:s.model || 'unbekannt',status:s.status,activeMinutes:Math.max(0,Math.floor((now-Date.parse(s.startedAt))/60000)),turnMinutes:s.status === 'working' && Number.isFinite(started)?Math.max(0,Math.floor((now-started)/60000)):0,lastTurnMinutes:s.lastTurnMs == null ? null : Math.floor(s.lastTurnMs / 60000),toolCount:s.toolCount ?? 0,recommendations:hints};
+          return {id:String(s.id).slice(0,8),project:s.project ?? 'Codex',model:s.model || 'unbekannt',status:s.status,activeMinutes:Math.max(0,Math.floor((now-Date.parse(s.startedAt))/60000)),turnMinutes:s.status === 'working' && Number.isFinite(started)?Math.max(0,Math.floor((now-started)/60000)):0,lastTurnMinutes:s.lastTurnMs == null ? null : Math.floor(s.lastTurnMs / 60000),toolCount:s.toolCount ?? 0,latestUsage:s.latestUsage ?? null,rateLimits:s.rateLimits ?? null,recommendations:hints};
         });
         return formatChatOverview({activeChats:chats.length,monitoredLocally:true,apiCallsForMonitoring:0,chats});
       } catch (error) {
@@ -90,7 +94,7 @@ async function main() {
       try { return format(await getSupervisor().check(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
     });
     server.registerTool('detect_stuck', {description:'Detect at least three trailing repetitions of a one-to-three-step cycle without caller-reported progress. Optional caller-declared grace allows at most two extra repetitions. Does not evaluate semantic progress.',inputSchema:stuckSchema}, async input => format(detectStuck(input)));
-    server.registerTool('triage_agent_run', {description:'Classify a supplied agent trace and return an advisory review recommendation. Jev mode sends the supplied trace to TypeSafe and may cost money. Recommendations never execute actions; action-permission claims are caller supplied and not verified.',inputSchema:traceTriageSchema}, async input => {
+    server.registerTool('triage_agent_run', {description:'Classify a supplied agent trace and return an advisory review recommendation. If currentModel telemetry is supplied, Jev also evaluates model fit from the complete trace and usage evidence. It never changes the model. Jev mode sends the supplied trace to TypeSafe and may cost money. Action-permission claims are caller supplied and not verified.',inputSchema:traceTriageSchema}, async input => {
       try { return format(await getTriage().evaluate(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
     });
     await server.connect(new StdioServerTransport()); return;

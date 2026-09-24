@@ -3,10 +3,11 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { buildTraceFromTranscript } from '../plugins/jev-chat-review/hooks/codex-transcript.mjs';
+import { spawnSync } from 'node:child_process';
+import { buildTraceFromTranscript, readLatestTokenTelemetry } from '../plugins/jev-chat-review/hooks/codex-transcript.mjs';
 import { parsePositiveLimit, recordUsage, reserveReview } from '../plugins/jev-chat-review/hooks/review-state.mjs';
-import { formatReviewCopy, formatReviewUsage } from '../plugins/jev-chat-review/hooks/review-copy.mjs';
-import { readMonitorView, recordMonitorEvent } from '../plugins/jev-chat-review/hooks/monitor-state.mjs';
+import { formatModelRecommendation, formatReviewCopy, formatReviewUsage } from '../plugins/jev-chat-review/hooks/review-copy.mjs';
+import { readMonitorSession, readMonitorView, recordMonitorEvent, recordMonitorUsage } from '../plugins/jev-chat-review/hooks/monitor-state.mjs';
 
 async function transcript(t, rows) {
   const dir = await mkdtemp(join(tmpdir(), 'jev-hook-'));
@@ -21,16 +22,22 @@ test('Codex adapter preserves visible turns and tool activity, skips hidden mess
     { type: 'response_item', payload: { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'private system prompt' }] } },
     { type: 'response_item', payload: { type: 'reasoning', summary: [{ type: 'summary_text', text: 'hidden reasoning' }] } },
     { type: 'event_msg', payload: { type: 'user_message', message: 'Build this feature; API_KEY=abc123' } },
+    { type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens:12000, cached_input_tokens:8000, output_tokens:300, reasoning_output_tokens:100, total_tokens:12400 }, total_token_usage: { total_tokens:50000 }, model_context_window:200000 }, rate_limits:{ primary:{used_percent:25}, secondary:{used_percent:61} } } },
     { type: 'response_item', payload: { type: 'function_call', call_id: 'c1', name: 'read_file', arguments: '{"path":"a.txt"}' } },
     { type: 'response_item', payload: { type: 'function_call_output', call_id: 'c1', output: 'Bearer abc.def.ghi' } },
     { type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Done.' }] } },
   ]);
-  const { trace } = await buildTraceFromTranscript(path, 'Done.');
+  const { trace, tokenUsage, rateLimits } = await buildTraceFromTranscript(path, 'Done.');
   assert.deepEqual(trace.turns.map(({ role }) => role), ['user', 'assistant']);
   assert.match(trace.turns[0].content, /\[REDACTED\]/);
   assert.doesNotMatch(JSON.stringify(trace), /private system prompt|hidden reasoning|abc123|abc\.def\.ghi/);
   assert.deepEqual(trace.toolCalls, [{ name: 'read_file', arguments: '{"path":"a.txt"}', result: 'Bearer [REDACTED]' }]);
   assert.equal(trace.finalMessage, 'Done.');
+  assert.equal(tokenUsage.totalTokens,12400);
+  assert.equal(tokenUsage.contextWindow,200000);
+  assert.deepEqual(rateLimits,{primaryUsedPercent:25,secondaryUsedPercent:61});
+  assert.equal(trace.telemetry.latestUsage.totalTokens,12400);
+  assert.deepEqual(await readLatestTokenTelemetry(path),{tokenUsage,rateLimits});
 });
 
 test('daily limits reserve usage before requests and suppress duplicate transcript reviews', async (t) => {
@@ -84,6 +91,13 @@ test('local chat monitor stores derived data only and flags repeated actions and
   const saved = await readFile(join(dir,'jev-chat-monitor-state.json'),'utf8');
   assert.doesNotMatch(saved, /session-secret|same output token-secret-value|main\.ts/);
   assert.match(saved, /codex-fast/);
+  await recordMonitorUsage(dir,'session-secret',{inputTokens:12000,cachedInputTokens:8000,outputTokens:300,reasoningOutputTokens:100,totalTokens:12400,contextWindow:200000},{primaryUsedPercent:25,secondaryUsedPercent:61});
+  const enriched=await readMonitorView(dir,base+12*60_000);
+  assert.equal(enriched.chats[0].latestUsage.totalTokens,12400);
+  assert.equal(enriched.chats[0].rateLimits.secondaryUsedPercent,61);
+  assert.equal((await readMonitorSession(dir,'session-secret')).currentModel,'codex-fast');
+  const afterUsage=await readFile(join(dir,'jev-chat-monitor-state.json'),'utf8');
+  assert.doesNotMatch(afterUsage,/same output token-secret-value|main\.ts/);
 });
 
 test('local monitor does not guess model fit from a short prompt and few tools', async (t) => {
@@ -96,6 +110,24 @@ test('local monitor does not guess model fit from a short prompt and few tools',
   assert.deepEqual(view.chats[0].recommendations, []);
   assert.equal(view.chats[0].turnMinutes, 0);
   assert.equal(view.chats[0].lastTurnMinutes, 0);
+});
+
+test('Stop hook records local token and limit telemetry without an API key', async (t) => {
+  const dir=await mkdtemp(join(tmpdir(),'jev-monitor-no-key-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const path=await transcript(t,[{type:'event_msg',payload:{type:'token_count',info:{last_token_usage:{input_tokens:180000,cached_input_tokens:120000,output_tokens:300,reasoning_output_tokens:20,total_tokens:180320},total_token_usage:{total_tokens:99000},model_context_window:200000},rate_limits:{primary:{used_percent:94},secondary:{used_percent:92}}}}]);
+  const now=Date.now();
+  await recordMonitorEvent(dir,{hook_event_name:'UserPromptSubmit',session_id:'local-only',model:'codex-balanced'},now);
+  const hook=spawnSync(process.execPath,[join(process.cwd(),'plugins/jev-chat-review/hooks/monitor-event.mjs')],{input:JSON.stringify({hook_event_name:'Stop',session_id:'local-only',transcript_path:path}),encoding:'utf8',env:{...process.env,PLUGIN_DATA:dir,AI_GATEWAY_API_KEY:''}});
+  assert.equal(hook.status,0);
+  assert.match(JSON.parse(hook.stdout).systemMessage,/90% des gemeldeten Kontextfensters/);
+  assert.match(JSON.parse(hook.stdout).systemMessage,/hohe Kontingentnutzung/);
+  const view=await readMonitorView(dir);
+  assert.equal(view.chats[0].latestUsage.totalTokens,180320);
+  assert.equal(view.chats[0].latestUsage.contextWindow,200000);
+  assert.equal(view.chats[0].rateLimits.primaryUsedPercent,94);
+  assert.equal(view.chats[0].rateLimits.secondaryUsedPercent,92);
+  assert.equal((await readMonitorSession(dir,'local-only')).currentModel,'codex-balanced');
 });
 
 test('long completed turns are described as past work, not as a chat still running', async (t) => {
@@ -125,6 +157,7 @@ test('review feedback is actionable German and exposes usage without claiming a 
   assert.match(usage, /800 Eingabe- und 35 Ausgabe-Tokens/);
   assert.match(usage, /2400 Eingabe- und 110 Ausgabe-Tokens/);
   assert.doesNotMatch(usage, /\$/);
+  assert.match(formatModelRecommendation({currentModel:'codex-balanced',action:'keep_current',confidence:.9,basis:['Jev las den Verlauf.']}),/Modellhinweis \(90%\).*codex-balanced/);
 });
 
 test('Codex adapter rejects missing, empty, oversized and overlong traces instead of silently sampling', async (t) => {

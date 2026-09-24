@@ -64,6 +64,16 @@ function recommendations(session, now = Date.now()) {
   if (session.loopCount >= 2) {
     result.push({ kind: 'repeated-stagnation', text: 'Dieselbe Tool-Aktion mit demselben Ergebnis wiederholte sich mehrfach. Ändere zuerst den Ansatz; Wiederholung allein belegt nicht, dass ein anderes Modell hilft.' });
   }
+  const usage=session.latestUsage;
+  if(usage?.contextWindow && usage.totalTokens/usage.contextWindow>=0.85) {
+    const percent=Math.round(usage.totalTokens/usage.contextWindow*100);
+    result.push({kind:'context-pressure',text:`Der letzte Codex-Aufruf nutzte etwa ${percent}% des gemeldeten Kontextfensters. Erwäge für die nächste größere Aufgabe einen neuen Chat oder eine kurze Übergabe.`});
+  }
+  const primary=session.rateLimits?.primaryUsedPercent;
+  const secondary=session.rateLimits?.secondaryUsedPercent;
+  if((primary!=null&&primary>=90)||(secondary!=null&&secondary>=90)) {
+    result.push({kind:'usage-limit-pressure',text:`Codex meldet hohe Kontingentnutzung${primary!=null&&primary>=90?` im Kurzzeitfenster (${Math.round(primary)}%)`:''}${secondary!=null&&secondary>=90?` im Wochenfenster (${Math.round(secondary)}%)`:''}.`});
+  }
   return result;
 }
 
@@ -79,6 +89,8 @@ export function buildMonitorView(state, now = Date.now()) {
       turnMinutes: session.turnStartedAt ? Math.max(0, Math.floor((now - Date.parse(session.turnStartedAt)) / 60_000)) : 0,
       lastTurnMinutes: session.lastTurnMs == null ? null : Math.floor(session.lastTurnMs / 60_000),
       toolCount: session.toolCount,
+      latestUsage: session.latestUsage ?? null,
+      rateLimits: session.rateLimits ?? null,
       recommendations: recommendations(session, now),
     }));
   return { activeChats: active.length, monitoredLocally: true, apiCallsForMonitoring: 0, chats: active };
@@ -134,4 +146,29 @@ export async function readMonitorView(dataDir, now = Date.now()) {
     if (error?.code === 'ENOENT') return buildMonitorView({ sessions: [] }, now);
     throw new Error('MONITOR_STATE_INVALID');
   }
+}
+
+export async function readMonitorSession(dataDir, sessionId) {
+  if (!dataDir || typeof sessionId !== 'string' || !sessionId) return null;
+  try {
+    const state = JSON.parse(await readFile(join(dataDir, FILE), 'utf8'));
+    const session = state?.sessions?.find((candidate) => candidate.id === hash(sessionId));
+    if (!session) return null;
+    return { currentModel: typeof session.model === 'string' && session.model !== 'unbekannt' ? session.model : null, toolCount: session.toolCount ?? 0, repeatedActions: session.loopCount ?? 0, latestUsage:session.latestUsage ?? null, rateLimits:session.rateLimits ?? null };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw new Error('MONITOR_STATE_INVALID');
+  }
+}
+
+export async function recordMonitorUsage(dataDir, sessionId, usage, rateLimits) {
+  if (!dataDir || typeof sessionId !== 'string' || !sessionId) return { skipped:true };
+  return withLock(dataDir, async (state) => {
+    const session = state.sessions.find((candidate) => candidate.id === hash(sessionId));
+    if (!session) return { skipped:true };
+    if (usage) session.latestUsage = usage;
+    if (rateLimits) session.rateLimits = rateLimits;
+    session.updatedAt = nowIso();
+    return { skipped:false, recommendations:recommendations(session).map((item)=>item.text) };
+  });
 }
