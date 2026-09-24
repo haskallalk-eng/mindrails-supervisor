@@ -8,8 +8,8 @@ for await (const chunk of process.stdin) {
 try {
   const event = JSON.parse(raw);
   const result = await recordMonitorEvent(process.env.PLUGIN_DATA, event);
-  if (result.recommendationCount > 0) {
-    process.stdout.write(`${JSON.stringify({ systemMessage: `Jev chat monitor: ${result.recommendationCount} Hinweis(e) verfügbar. Öffne im Jev-Bereich „Offene Chats“ für die lokale Übersicht.` })}\n`);
+  if (event.hook_event_name === 'Stop' && result.recommendations?.length) {
+    process.stdout.write(`${JSON.stringify({ systemMessage: `Jev Chat-Monitor (lokal): ${result.recommendations.join(' ')}` })}\n`);
   }
 } catch {
   // Monitoring is best-effort and must never interrupt a Codex turn.

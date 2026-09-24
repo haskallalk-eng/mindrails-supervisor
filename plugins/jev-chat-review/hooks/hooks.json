@@ -10,8 +10,7 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/monitor-event.mjs\"",
-            "timeout": 2,
-            "async": true
+            "timeout": 2
           },
           {
             "type": "command",

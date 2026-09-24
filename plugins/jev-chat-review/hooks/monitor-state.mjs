@@ -62,7 +62,7 @@ function promptComplexity(prompt) {
 
 function recommendations(session, now = Date.now()) {
   const result = [];
-  if (session.turnStartedAt && session.status === 'working' && now - Date.parse(session.turnStartedAt) >= LONG_TURN_MS) {
+  if (session.turnStartedAt && ['working','waiting'].includes(session.status) && now - Date.parse(session.turnStartedAt) >= LONG_TURN_MS) {
     result.push({ kind: 'long-running', text: 'Dieser Durchlauf läuft seit über 10 Minuten. Prüfe, ob der Chat noch Fortschritt macht oder einen klaren Zwischenauftrag braucht.' });
   }
   const recent = session.actions.slice(-6);
@@ -128,7 +128,7 @@ export async function recordMonitorEvent(dataDir, event = {}, now = Date.now()) 
     }
     if (eventName === 'stop') session.status = 'waiting';
     if (eventName === 'sessionend') { session.status = 'ended'; session.turnStartedAt = null; }
-    return { skipped: false, status: session.status, recommendationCount: recommendations(session, now).length };
+    return { skipped: false, status: session.status, recommendations: recommendations(session, now).map((item) => item.text) };
   });
 }
 

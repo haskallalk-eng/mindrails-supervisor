@@ -24,6 +24,8 @@ test('Codex plugin automatically reviews completed runs and retains an optional 
   assert.match(skill, /Do not ask the user to paste the transcript/);
   assert.match(skill, /automatically through the plugin's Stop hook/);
   assert.ok(['SessionStart','UserPromptSubmit','PostToolUse','SessionEnd'].every(name => hooks.hooks[name]?.[0]?.hooks?.[0]?.async === true));
+  const monitorStop = hooks.hooks.Stop[0].hooks.find(hook => hook.command.includes('monitor-event.mjs'));
+  assert.equal(monitorStop.async, undefined);
   assert.match(hooks.hooks.Stop[0].hooks.find(hook => hook.command.includes('review-stop.mjs')).command, /review-stop\.mjs/);
 
   const hookScript = join(plugin, 'hooks', 'review-stop.mjs');
@@ -65,6 +67,9 @@ test('Codex plugin automatically reviews completed runs and retains an optional 
     assert.equal(overview.structuredContent.apiCallsForMonitoring, 0);
     assert.equal(overview.structuredContent.chats[0].project,'api');
     assert.ok(overview.structuredContent.chats[0].recommendations.some(item => item.includes('kleineres')));
+    const notice = spawnSync(process.execPath,[join(plugin,'hooks','monitor-event.mjs')],{input:JSON.stringify({hook_event_name:'Stop',session_id:'visible-session'}),encoding:'utf8',env:{...process.env,PLUGIN_DATA:monitorDir}});
+    assert.equal(notice.status,0);
+    assert.match(JSON.parse(notice.stdout).systemMessage,/Jev Chat-Monitor.*kleineres/);
     const result = await client.callTool({
       name: 'triage_agent_run',
       arguments: {
