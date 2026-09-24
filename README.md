@@ -84,6 +84,8 @@ Jev mode sends task, result, requirements and supplied evidence to the selected 
 
 The initial twelve-case Jev run on 2026-09-23 returned `continue` for every case (7/12, same as an always-continue baseline). After separating artifact completion from optional source-backed fact-checking and lowering the initial signal threshold to 0.85, a follow-up run on the same hand-labeled cases scored 12/12 with no false finishes, false continues or provider errors. This is a tuned synthetic suite, not a production accuracy estimate; validate on held-out cases before relying on the gate. The run used 7,054 input tokens and its catalog-rate estimate was $0.00028216. See the [follow-up result](evidence/results/jev-live-vercel-2026-09-24.json), [initial result](evidence/results/jev-live-vercel-2026-09-23.json) and [method](docs/evidence.md).
 
+A separate eight-case set was frozen before being sent to Jev and was not used for tuning: 7/8 correct, no false finishes, one false continue on a valid JSON artifact, and no provider errors. This suggests the policy errs conservatively on some structured outputs. We did not lower thresholds based on this held-out result. See the [held-out report](evidence/results/jev-heldout-vercel-2026-09-24.json).
+
 ## Limits and privacy
 
 | Setting | Default | Scope |

@@ -49,6 +49,8 @@ node evidence/jev-live-suite.mjs --execute
 
 For Vercel's official TypeSafe-compatible route, also set `MINDRAILS_JEV_ROUTE=vercel-ai-gateway` and use `AI_GATEWAY_API_KEY` instead. That route reports the unversioned `typesafe-ai/jev` alias and must not be presented as a native `jev-1.13.0` result.
 
+An independent eight-case set is also available with `npm run jev:heldout:dry-run`. Its fixture hash and labels are frozen in `evidence/jev-heldout-suite.mjs`. To execute it, use the same two environment gates with `node evidence/jev-heldout-suite.mjs --execute`; it is capped at eight requests and a conservative $0.05 input-cost maximum. This set is kept separate from policy tuning.
+
 The live path makes at most twelve requests, never retries, reports provider token usage and separates false finishes, false continues, unexpected reviews and provider errors. Missing usage is counted and included in a conservative cost ceiling rather than treated as free. Native cost uses the documented $0.042 per million input tokens; the Vercel route uses the catalog rate of $0.04 per million, both checked on 2026-09-23. Output tokens are documented as free. Actual account terms and pricing control. No key is stored in the repository.
 
 ## Initial live gateway result
@@ -76,5 +78,13 @@ The fix distinguishes reviewing whether a requested artifact contains the reques
 On 2026-09-24, the same twelve labeled scenarios were run through the Vercel route again. Jev produced 5 `finish` and 7 `continue` decisions, matching all expected labels: **12/12, zero false finishes, zero false continues and zero provider errors**. It used 7,054 input and 1,024 output tokens; the catalog-rate estimate was $0.00028216. The sanitized row-level report is in [`evidence/results/jev-live-vercel-2026-09-24.json`](../evidence/results/jev-live-vercel-2026-09-24.json), SHA-256 `62e37431648c9b5764cf528ebee5c08ec49ec5c1a036bda5252d38ef7e094059`.
 
 This result demonstrates that the revised policy can separate these twelve hand-authored cases. The policy and prompt were adjusted after seeing the first run, so the follow-up is tuned evidence rather than an independent validation set. Do not infer production accuracy or use it as a sole authorization control. The Vercel alias also does not establish which native Jev version served the call.
+
+## Independent held-out check
+
+The separately frozen eight-case set was executed once on 2026-09-24 through Vercel, after the 0.85 threshold and evidence modes were fixed. It scored **7/8**, with 0 false finishes, 1 false continue and 0 provider errors. The false continue was a valid JSON artifact: Jev rated each explicit requirement at 0.96 or higher, but also returned task satisfaction 0.78 and contradiction 0.25, so the gate conservatively continued. We left the threshold and policy unchanged after seeing this result.
+
+Provider usage was 4,596 input and 660 output tokens; the catalog-rate estimate was $0.00018384. The sanitized report is [`evidence/results/jev-heldout-vercel-2026-09-24.json`](../evidence/results/jev-heldout-vercel-2026-09-24.json), SHA-256 `9b08149861bd607442c3d788d1843fb188fbdac3624ef4d33a9824560d31cc12`.
+
+This adds an independent check against the tuned twelve-case suite, but eight hand-authored examples remain too few to infer real-world accuracy. The false continue also shows the global task/contradiction signals can override strong requirement-level scores on structured output.
 
 The official documentation also says English is the primary training language and lists weaknesses involving literal wording, numbers, indirection, irrelevant context and adversarial content. A useful semantic evaluation needs pre-labeled cases covering those boundaries; a single successful call would establish connectivity, not accuracy.

@@ -38,3 +38,8 @@ test('live Jev suite is dry-run by default with frozen bounded fixtures',()=>{
   assert.equal(report.fixtureHash,'1dfa67a890aa42d4c5fb904fbcd8889e9fdcda5c919f77902acaea2c0d651eb0');
   assert.ok(report.conservativeHardMaximumUsd<0.1);
 });
+test('held-out Jev suite is frozen and dry-run by default',()=>{
+  const report=JSON.parse(execFileSync(process.execPath,['evidence/jev-heldout-suite.mjs'],{encoding:'utf8'}));
+  assert.equal(report.mode,'dry-run'); assert.equal(report.cases.length,8); assert.equal(report.maxRequests,8);
+  assert.equal(report.fixtureHash,'6ffef656ca2c9a11b66d23a4326782c1b889bc61053f6ba5ffbb26ae09e01178'); assert.ok(report.conservativeHardMaximumUsd<0.05);
+});

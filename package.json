@@ -10,6 +10,7 @@
     "e2e": "node examples/mcp-e2e.mjs",
     "evidence": "node evidence/run.mjs",
     "jev:suite:dry-run": "node evidence/jev-live-suite.mjs",
+    "jev:heldout:dry-run": "node evidence/jev-heldout-suite.mjs",
     "prepack": "npm run build"
   },
   "keywords": [],

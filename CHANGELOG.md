@@ -5,6 +5,7 @@
 - Separate artifact completion from explicit source-backed `fact-check` mode; only fact-check mode hard-gates on supplied evidence.
 - Adjust the initial signal threshold from 0.90 to 0.85 based on the five false continues in the first frozen Jev suite.
 - Re-run the same twelve synthetic cases through Vercel Jev: 12/12 correct, no false finishes, false continues or provider errors; document that this tuned set is not held-out validation.
+- Add a separate frozen eight-case held-out Jev check: 7/8 correct, zero false finishes, one false continue, zero provider errors; leave the policy unchanged after the run.
 - Add a live sanitized result and update CLI, MCP examples, policy tests and documentation.
 
 ## 0.2.0 — 2026-09-23
