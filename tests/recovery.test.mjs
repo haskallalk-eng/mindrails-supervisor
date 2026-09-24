@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { recoveryAdvice, recoveryQuestions } from '../dist/recovery.js';
 import { traceQuestions, modelFitChoices } from '../dist/trace.js';
 import { TraceTriage } from '../dist/triage.js';
-import { formatRecoveryAdvice } from '../plugins/jev-chat-review/hooks/review-copy.mjs';
+import { formatRecoveryAdvice, formatModelRecommendation, shouldSurfaceReview } from '../plugins/jev-chat-review/hooks/review-copy.mjs';
 
 const label=(criteria,choice)=>({choice,confidence:.95,probabilities:Object.fromEntries(Object.keys(criteria).map(key=>[key,key===choice?.96:.04/(Object.keys(criteria).length-1)]))});
 const diagnosis=(progress,blocker,next_step)=>Object.fromEntries(Object.entries({progress,blocker,next_step}).map(([id,value])=>[id,label(recoveryQuestions[id],value)]));
@@ -41,7 +41,9 @@ test('conflicting causes, completion claims and actions abstain without a follow
   for(const signals of [diagnosis('stalled','environment','change_approach'),diagnosis('complete','environment','fix_environment'),diagnosis('stalled','none','continue'),diagnosis('complete','none','continue')]) {
     const result=recoveryAdvice(signals,labels);
     assert.equal(result.reason,'CONFLICTING_JUDGMENTS');
-    assert.equal(result.action,'review');
+    assert.equal(result.action,'none');
+    assert.equal(result.status,'uncertain');
+    assert.equal(formatRecoveryAdvice(result),'');
     assert.equal(result.suggestedPrompt,undefined);
   }
 });
@@ -49,6 +51,49 @@ test('high selected probability alone cannot bypass low confidence',()=>{
   const signals=diagnosis('stalled','environment','fix_environment');
   signals.blocker.confidence=.4;
   assert.equal(recoveryAdvice(signals,labels).reason,'LOW_CONFIDENCE');
+  assert.equal(recoveryAdvice(signals,labels).action,'none');
+});
+
+test('model fallback copy does not present uncertainty as a confident Jev diagnosis',()=>{
+  assert.equal(formatModelRecommendation({decisionBasis:'baseline_fallback',action:'keep_current'}),'');
+  const copy=formatModelRecommendation({decisionBasis:'quality_fallback',action:'try_more_capable',confidence:.4});
+  assert.match(copy,/Qualitätsregel/);
+  assert.doesNotMatch(copy,/40%/);
+});
+
+test('uncertain interventions stay quiet; quality upgrades and service failures remain visible',()=>{
+  const baseline={recommendation:'CONTINUE_BASELINE',reasons:['LOW_CONFIDENCE_OR_UNCERTAIN'],modelRecommendation:{action:'keep_current'}};
+  assert.equal(shouldSurfaceReview(baseline),false);
+  assert.equal(shouldSurfaceReview({...baseline,modelRecommendation:{action:'try_more_capable',decisionBasis:'quality_fallback'}}),true);
+  assert.equal(shouldSurfaceReview({...baseline,reasons:['PROVIDER_TIMEOUT']}),true);
+});
+
+test('unfinished work with uncertain recovery retains the baseline rather than requesting human intervention',async()=>{
+  const signals=diagnosis('advancing','uncertain','continue');
+  const result=await new TraceTriage({mode:'jev',evaluateTrace:async()=>({...labels,run_health:label(traceQuestions.run_health,'healthy'),recovery:signals})}).evaluate({task:'Fix code',instructions:'Use tests',turns:[],toolCalls:[],finalMessage:'Working on remaining test.'});
+  assert.equal(result.recommendation,'CONTINUE_BASELINE');
+  assert.equal(result.recoveryAdvice.action,'none');
+  assert.equal(shouldSurfaceReview(result),false);
+});
+
+test('uncertain progress does not mask a clear environment prerequisite when routing models',async()=>{
+  const signals=diagnosis('stalled','environment','fix_environment');
+  signals.progress.confidence=.2;
+  const fit=label(modelFitChoices,'try_more_capable'); fit.confidence=.4;
+  const result=await new TraceTriage({mode:'jev',evaluateTrace:async()=>({...labels,recovery:signals,model_fit:fit})}).evaluate({task:'Run checks',instructions:'Use existing tests',turns:[],toolCalls:[],finalMessage:'Cannot start tests.',telemetry:{currentModel:'test-model'}});
+  assert.equal(result.recoveryAdvice.action,'none');
+  assert.equal(result.modelRecommendation.action,'keep_current');
+  assert.equal(result.modelRecommendation.decisionBasis,'prerequisite_override');
+});
+
+test('uncertain recovery alone does not veto a plausible quality upgrade',async()=>{
+  const signals=diagnosis('stalled','ineffective_approach','change_approach');
+  signals.progress.confidence=.2;
+  const fit=label(modelFitChoices,'try_more_capable'); fit.confidence=.4;
+  const result=await new TraceTriage({mode:'jev',evaluateTrace:async()=>({...labels,recovery:signals,model_fit:fit})}).evaluate({task:'Fix code',instructions:'Use tests',turns:[],toolCalls:[],finalMessage:'Still investigating.',telemetry:{currentModel:'test-model'}});
+  assert.equal(result.recoveryAdvice.action,'none');
+  assert.equal(result.modelRecommendation.action,'try_more_capable');
+  assert.equal(result.modelRecommendation.decisionBasis,'quality_fallback');
 });
 test('invalid, missing and foreign probability keys fail closed',()=>{
   const signals=diagnosis('stalled','environment','fix_environment');
@@ -59,7 +104,8 @@ test('invalid, missing and foreign probability keys fail closed',()=>{
 test('an environment blocker suppresses a conflicting model upgrade in the actual triage result',async()=>{
   const result=await new TraceTriage({mode:'jev',evaluateTrace:async()=>({...labels,recovery:diagnosis('stalled','environment','fix_environment'),model_fit:label(modelFitChoices,'try_more_capable')})}).evaluate({task:'Run checks',instructions:'Use existing tests',turns:[{role:'user',content:'Run checks'}],toolCalls:[{name:'test',arguments:'test',result:'Missing runtime executable'}],finalMessage:'Tests cannot start.',telemetry:{currentModel:'test-model'}});
   assert.equal(result.recoveryAdvice.action,'fix_environment');
-  assert.equal(result.modelRecommendation.action,'uncertain');
+  assert.equal(result.modelRecommendation.action,'keep_current');
+  assert.equal(result.modelRecommendation.decisionBasis,'prerequisite_override');
   assert.ok(result.modelRecommendation.basis[0].includes('Voraussetzung'));
 });
 

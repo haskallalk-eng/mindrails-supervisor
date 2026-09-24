@@ -1,9 +1,11 @@
 const reasonCopy = {
-  RECOVERY_CONFLICT: 'Die Erfolgsbewertung und die Ursachenprüfung passen nicht zusammen. Prüfe das Ergebnis.',
+  BASELINE_UNCERTAIN_RECOVERY: 'Die Aufgabe ist noch offen, aber Jev hat keinen klaren Eingriffsvorschlag. Der normale Ablauf bleibt bestehen.',
+  RECOVERY_CONFLICT: 'Die Einschätzungen widersprechen sich. Jev greift nicht ein; Erfolg wird nicht bestätigt.',
   RECOVERY_NEEDED: 'Die Ursachenprüfung sieht noch einen offenen Punkt. Prüfe den vorgeschlagenen nächsten Schritt.',
   TRACE_COMPLETE_NO_USER_FEEDBACK: 'Der Lauf wirkt vollständig, aber es gibt noch keine Nutzerbestätigung.',
   TRACE_COMPLETE_AND_USER_SATISFIED: 'Der Lauf wirkt vollständig und der Nutzer hat das Ergebnis bestätigt.',
-  LOW_CONFIDENCE_OR_UNCERTAIN: 'Die Belege sind nicht eindeutig. Prüfe kurz das Ergebnis oder die Tests.',
+  LOW_CONFIDENCE_OR_UNCERTAIN: 'Die Belege sind nicht eindeutig. Jev lässt den normalen Ablauf unverändert und bestätigt keinen Erfolg.',
+  BUDGET_EXHAUSTED: 'Das Jev-Prüflimit ist erreicht. Der normale Ablauf bleibt unverändert.',
   SUCCESS_CLAIM_WITHOUT_SUPPORT: 'Erfolg wird behauptet, aber im Verlauf nicht belegt. Prüfe Ergebnis oder Tests.',
   CLEAR_RUN_FAILURE: 'Ein konkreter Fehler ist sichtbar. Nutze den Fehlerbericht als nächsten Ansatzpunkt.',
   MATERIAL_EXPECTATION_GAP: 'Das Ergebnis könnte an der Anforderung vorbeigehen. Vergleiche beides kurz.',
@@ -22,6 +24,7 @@ export function formatReviewCopy(recommendation, reasons = []) {
   const failure = reasons.some((code) => code.startsWith('PROVIDER_') || code === 'INVALID_PROVIDER_RESPONSE');
   if (reason) return { failure, text: reason };
   const text = {
+    CONTINUE_BASELINE: 'Jev greift nicht ein. Der normale Ablauf bleibt unverändert; das ist keine Erfolgsbestätigung.',
     AUTO_CLOSE: 'Jev sieht den Lauf als vollständig an. (Es wird nichts automatisch geschlossen.)',
     HUMAN_REVIEW: 'Jev empfiehlt einen kurzen Blick auf den Lauf.',
     PRIORITY_REVIEW: 'Jev empfiehlt, den Lauf zeitnah zu prüfen.',
@@ -40,6 +43,9 @@ export function formatReviewUsage({ calls, maxCalls, inputBytes, maxInputBytes, 
 
 export function formatModelRecommendation(recommendation) {
   if (!recommendation) return '';
+  if (recommendation.decisionBasis === 'baseline_fallback') return '';
+  if (recommendation.decisionBasis === 'quality_fallback') return 'Vorsorglicher Modellhinweis: Bei der unklaren Fähigkeitsgrenze bevorzugt unsere Qualitätsregel ein stärkeres Modell. Das ist eine Empfehlung aus der Produktregel, keine sichere Jev-Diagnose; ein Wechsel kann mehr kosten.';
+  if (recommendation.decisionBasis === 'prerequisite_override') return 'Modell beibehalten: Zuerst die erkannte Voraussetzung klären oder widersprüchliche Einschätzungen prüfen.';
   const confidence = `${Math.round(recommendation.confidence * 100)}%`;
   const text = {
     keep_current: `Jev hält das aktuelle Modell (${recommendation.currentModel}) für passend.`,
@@ -54,4 +60,10 @@ export function formatModelRecommendation(recommendation) {
 export function formatRecoveryAdvice(advice) {
   if (!advice || advice.action === 'none') return '';
   return `Nächster Schritt: ${advice.title}${advice.suggestedPrompt ? ` Vorschlag zum Übernehmen: „${advice.suggestedPrompt}“` : ''}`;
+}
+
+export function shouldSurfaceReview(result) {
+  if (result.recommendation !== 'CONTINUE_BASELINE') return true;
+  if (formatReviewCopy(result.recommendation,result.reasons).failure) return true;
+  return Boolean(formatRecoveryAdvice(result.recoveryAdvice)) || ['try_more_capable','try_faster'].includes(result.modelRecommendation?.action);
 }

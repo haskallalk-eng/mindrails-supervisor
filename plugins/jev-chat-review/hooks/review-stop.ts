@@ -1,6 +1,6 @@
 import { createTraceTriage } from '../../../src/triage.js';
 import { buildTraceFromTranscript } from './codex-transcript.mjs';
-import { formatReviewCopy, formatReviewUsage, formatModelRecommendation, formatRecoveryAdvice } from './review-copy.mjs';
+import { formatReviewCopy, formatReviewUsage, formatModelRecommendation, formatRecoveryAdvice, shouldSurfaceReview } from './review-copy.mjs';
 import { parsePositiveLimit, recordUsage, reserveReview } from './review-state.mjs';
 import { readMonitorSession, recordMonitorUsage } from './monitor-state.mjs';
 
@@ -64,7 +64,10 @@ if (hookInputTooLarge) {
     const usageLine = formatReviewUsage({ ...totals, maxCalls, maxInputBytes }, usage);
     const modelLine=formatModelRecommendation(result.modelRecommendation);
     const recoveryLine=formatRecoveryAdvice(result.recoveryAdvice);
-    emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text}${recoveryLine ? ` ${recoveryLine}` : ''}${modelLine ? ` ${modelLine}` : ''} ${usageLine}`);
+    // Uncertainty alone should not add an instruction or an interruption to the chat.
+    if (shouldSurfaceReview(result)) {
+      emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text}${recoveryLine ? ` ${recoveryLine}` : ''}${modelLine ? ` ${modelLine}` : ''} ${usageLine}`);
+    }
   }
 } catch (error) {
   const code = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'REVIEW_FAILED';

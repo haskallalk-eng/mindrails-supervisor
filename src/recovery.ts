@@ -31,7 +31,7 @@ export const recoveryQuestions = {
 export type RecoveryQuestionId = keyof typeof recoveryQuestions;
 export type RecoveryLabels = Record<RecoveryQuestionId, TraceLabel>;
 export type RecoveryAdvice = {
-  policyVersion: 'recovery-v1';
+  policyVersion: 'recovery-v2';
   action: 'none' | 'review' | 'ask_question' | 'fix_environment' | 'change_approach' | 'verify_result' | 'realign';
   status: 'supported' | 'uncertain';
   reason: 'AGREEMENT' | 'LOW_CONFIDENCE' | 'CONFLICTING_JUDGMENTS';
@@ -58,8 +58,8 @@ export function validateRecoveryLabels(value: RecoveryLabels): void {
 
 export function recoveryAdvice(signals: RecoveryLabels, labels: TraceLabels): RecoveryAdvice {
   validateRecoveryLabels(signals);
-  const base = { policyVersion: 'recovery-v1' as const, signals };
-  const abstain = (reason: 'LOW_CONFIDENCE' | 'CONFLICTING_JUDGMENTS'): RecoveryAdvice => ({ ...base, action: 'review', status: 'uncertain', reason, title: reason === 'LOW_CONFIDENCE' ? 'Jev hat keine ausreichend klare Grundlage für einen Eingriff.' : 'Jevs Einschätzungen widersprechen sich; daraus folgt keine konkrete Handlungsanweisung.' });
+  const base = { policyVersion: 'recovery-v2' as const, signals };
+  const abstain = (reason: 'LOW_CONFIDENCE' | 'CONFLICTING_JUDGMENTS'): RecoveryAdvice => ({ ...base, action: 'none', status: 'uncertain', reason, title: 'Kein Eingriff: Der normale Ablauf bleibt bestehen; ein Erfolg wird damit nicht bestätigt.' });
   // These are initial product thresholds, not measured accuracy guarantees.
   if (Object.values(signals).some(label => label.confidence < .75 || label.probabilities[label.choice]! < .8) || signals.progress.choice === 'uncertain' || signals.blocker.choice === 'uncertain' || signals.next_step.choice === 'review') return abstain('LOW_CONFIDENCE');
   const mapping: Record<string, string> = { none: 'continue', missing_information: 'ask_question', environment: 'fix_environment', ineffective_approach: 'change_approach', verification_gap: 'verify_result', requirement_mismatch: 'realign' };

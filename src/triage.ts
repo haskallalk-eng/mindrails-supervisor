@@ -9,16 +9,16 @@ export interface TraceTriageProvider {
   evaluateTrace(input: TraceTriageInput, signal: AbortSignal): Promise<TraceLabels>;
 }
 export type TraceTriageResult = {
-  recommendation: 'AUTO_CLOSE' | 'HUMAN_REVIEW' | 'PRIORITY_REVIEW' | 'FILE_ISSUE' | 'ROUTE_PAGE_ON_CALL';
+  recommendation: 'CONTINUE_BASELINE' | 'AUTO_CLOSE' | 'HUMAN_REVIEW' | 'PRIORITY_REVIEW' | 'FILE_ISSUE' | 'ROUTE_PAGE_ON_CALL';
   reasons: string[];
   provider: 'jev' | 'mock';
   model: string;
-  policyVersion: 'agent-trace-triage-v1';
+  policyVersion: 'agent-trace-triage-v2';
   synthetic: boolean;
   labels?: TraceLabels;
   providerUsage?: { inputTokens:number; outputTokens:number };
   recoveryAdvice?: RecoveryAdvice;
-  modelRecommendation?: { currentModel:string; action:'keep_current'|'try_more_capable'|'try_faster'|'uncertain'; confidence:number; basis:string[] };
+  modelRecommendation?: { currentModel:string; action:'keep_current'|'try_more_capable'|'try_faster'|'uncertain'; confidence:number; decisionBasis:'model'|'baseline_fallback'|'quality_fallback'|'prerequisite_override'; basis:string[] };
 };
 
 function modelRecommendation(input:TraceTriageInput, labels:TraceLabels):TraceTriageResult['modelRecommendation'] {
@@ -27,7 +27,12 @@ function modelRecommendation(input:TraceTriageInput, labels:TraceLabels):TraceTr
   const label=labels.model_fit;
   if(!label || !Object.hasOwn(modelFitChoices,label.choice) || !Number.isFinite(label.confidence) || label.confidence<0 || label.confidence>1 || Object.keys(label.probabilities).length!==Object.keys(modelFitChoices).length || Object.keys(modelFitChoices).some(key=>!Number.isFinite(label.probabilities[key]) || label.probabilities[key]!<0 || label.probabilities[key]!>1) || Math.abs(Object.values(label.probabilities).reduce((a,b)=>a+b,0)-1)>0.03 || Math.abs(label.probabilities[label.choice]!-Math.max(...Object.values(label.probabilities)))>0.0001) throw new SafeError('INVALID_PROVIDER_RESPONSE');
   const confidence=label.confidence;
-  const action=confidence<0.65 || label.probabilities[label.choice]!<0.75 ? 'uncertain' : label.choice as 'keep_current'|'try_more_capable'|'try_faster'|'uncertain';
+  const strong=confidence>=0.65 && label.probabilities[label.choice]!>=0.75 && label.choice!=='uncertain';
+  // User policy: be conservative about downgrades, quality-biased about plausible upgrades.
+  // The .25 competing-upgrade floor is a product default, not a calibrated guarantee.
+  const plausibleUpgrade=label.choice==='try_more_capable' || (label.choice==='uncertain' && label.probabilities.try_more_capable!>=.25 && label.probabilities.try_more_capable!>=Math.max(label.probabilities.keep_current!,label.probabilities.try_faster!));
+  const action=strong ? label.choice as 'keep_current'|'try_more_capable'|'try_faster' : plausibleUpgrade ? 'try_more_capable' : 'keep_current';
+  const decisionBasis=strong ? 'model' : plausibleUpgrade ? 'quality_fallback' : 'baseline_fallback';
   const basis=[`Jev hat ${input.turns.length} sichtbare Chatbeiträge und ${input.toolCalls.length} Werkzeugaufrufe erhalten.`];
   const usage=input.telemetry?.latestUsage;
   if(usage?.contextWindow && usage.totalTokens) basis.push(`Letzte Anfrage: ${usage.totalTokens.toLocaleString('de-DE')} von ${usage.contextWindow.toLocaleString('de-DE')} Kontext-Tokens (${Math.round(usage.totalTokens/usage.contextWindow*100)}%).`);
@@ -36,19 +41,20 @@ function modelRecommendation(input:TraceTriageInput, labels:TraceLabels):TraceTr
   const repeated=signatures.length-new Set(signatures).size;
   if(repeated) basis.push(`${repeated} exakt wiederholte Werkzeugaufrufe mit gleichem Ergebnis.`);
   const actionText={keep_current:'Jev hält das aktuelle Modell für vergleichbare Aufgaben für passend.',try_more_capable:'Jev sieht Hinweise auf eine mögliche Fähigkeitsgrenze und empfiehlt, bei ähnlichen Aufgaben ein stärkeres Modell zu testen.',try_faster:'Jev hält einen vorsichtigen Test mit einem schnelleren Modell bei ähnlich risikoarmen Aufgaben für sinnvoll; Einsparungen wurden nicht gemessen.',uncertain:'Jev hat nicht genug Belege für einen Modellwechsel.'}[action];
-  basis.unshift(actionText);
-  return {currentModel,action,confidence,basis};
+  basis.unshift(decisionBasis==='quality_fallback' ? 'Qualitätsregel bei Unsicherheit: Hinweise sprechen für mehr Modellfähigkeit; deshalb ein stärkeres Modell bevorzugen. Dies ist eine Produktregel, kein sicheres Jev-Urteil.' : decisionBasis==='baseline_fallback' ? 'Bei Unsicherheit bleibt das aktuelle Modell erhalten. Daraus folgt keine bestätigte Modellpassung.' : actionText);
+  return {currentModel,action,confidence,decisionBasis,basis};
 }
 
 function pickRecommendation(input: TraceTriageInput, labels: TraceLabels): { recommendation:TraceTriageResult['recommendation']; reasons:string[] } {
   if (input.actions?.some(action => action.performed && !action.permitted)) return { recommendation:'ROUTE_PAGE_ON_CALL', reasons:['CALLER_REPORTED_UNPERMITTED_ACTION'] };
-  const weakest = (Object.keys(traceQuestions) as TraceQuestionId[]).some(id => labels[id].confidence < 0.75 || labels[id].probabilities[labels[id].choice]! < 0.8);
-  if (weakest || labels.task_outcome.choice === 'uncertain') return { recommendation:'HUMAN_REVIEW', reasons:['LOW_CONFIDENCE_OR_UNCERTAIN'] };
-  if (labels.run_health.choice === 'silent_failure') return { recommendation:'PRIORITY_REVIEW', reasons:['SUCCESS_CLAIM_WITHOUT_SUPPORT'] };
-  if (labels.run_health.choice === 'overt_failure') return { recommendation:'FILE_ISSUE', reasons:['CLEAR_RUN_FAILURE'] };
-  if (labels.run_health.choice === 'expectation_gap') return { recommendation:'HUMAN_REVIEW', reasons:['MATERIAL_EXPECTATION_GAP'] };
-  if (labels.user_outcome.choice === 'dissatisfied') return { recommendation:'HUMAN_REVIEW', reasons:['USER_REPORTED_DISSATISFACTION'] };
-  if (labels.task_outcome.choice === 'incomplete') return { recommendation:'HUMAN_REVIEW', reasons:['TASK_INCOMPLETE'] };
+  const strong=(id:TraceQuestionId)=>labels[id].confidence>=.75 && labels[id].probabilities[labels[id].choice]!>=.8;
+  // Clear failure signals survive uncertainty in an unrelated question.
+  if (strong('run_health') && labels.run_health.choice === 'silent_failure') return { recommendation:'PRIORITY_REVIEW', reasons:['SUCCESS_CLAIM_WITHOUT_SUPPORT'] };
+  if (strong('run_health') && labels.run_health.choice === 'overt_failure') return { recommendation:'FILE_ISSUE', reasons:['CLEAR_RUN_FAILURE'] };
+  if (strong('run_health') && labels.run_health.choice === 'expectation_gap') return { recommendation:'HUMAN_REVIEW', reasons:['MATERIAL_EXPECTATION_GAP'] };
+  if (strong('user_outcome') && labels.user_outcome.choice === 'dissatisfied') return { recommendation:'HUMAN_REVIEW', reasons:['USER_REPORTED_DISSATISFACTION'] };
+  if (strong('task_outcome') && labels.task_outcome.choice === 'incomplete') return { recommendation:'HUMAN_REVIEW', reasons:['TASK_INCOMPLETE'] };
+  if ((Object.keys(traceQuestions) as TraceQuestionId[]).some(id=>!strong(id)) || labels.task_outcome.choice === 'uncertain') return { recommendation:'CONTINUE_BASELINE', reasons:['LOW_CONFIDENCE_OR_UNCERTAIN'] };
   return { recommendation:'AUTO_CLOSE', reasons:[labels.user_outcome.choice === 'no_feedback' ? 'TRACE_COMPLETE_NO_USER_FEEDBACK' : 'TRACE_COMPLETE_AND_USER_SATISFIED'] };
 }
 
@@ -59,9 +65,9 @@ export class TraceTriage {
   }
   async evaluate(raw: unknown): Promise<TraceTriageResult> {
     const input = traceTriageSchema.parse(raw);
-    const base = { provider:this.provider.mode, model:this.provider.model ?? (this.provider.mode === 'jev' ? 'typesafe-ai/jev' : 'synthetic-trace-fixture-v1'), policyVersion:'agent-trace-triage-v1' as const, synthetic:this.provider.mode === 'mock' };
+    const base = { provider:this.provider.mode, model:this.provider.model ?? (this.provider.mode === 'jev' ? 'typesafe-ai/jev' : 'synthetic-trace-fixture-v1'), policyVersion:'agent-trace-triage-v2' as const, synthetic:this.provider.mode === 'mock' };
     if (input.actions?.some(action => action.performed && !action.permitted)) return { ...base,recommendation:'ROUTE_PAGE_ON_CALL',reasons:['CALLER_REPORTED_UNPERMITTED_ACTION'] };
-    if (this.calls >= this.limits.maxCalls) return { ...base,recommendation:'HUMAN_REVIEW',reasons:['BUDGET_EXHAUSTED'] };
+    if (this.calls >= this.limits.maxCalls) return { ...base,recommendation:'CONTINUE_BASELINE',reasons:['BUDGET_EXHAUSTED'] };
     this.calls++;
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -74,22 +80,28 @@ export class TraceTriage {
       const recovery=labels.recovery ? recoveryAdvice(labels.recovery,labels) : undefined;
       const modelFit=modelRecommendation(input,labels);
       if (modelFit && recovery && modelFit.action !== 'uncertain' && modelFit.action !== 'keep_current') {
-        const prerequisite = recovery.status === 'supported' && ['fix_environment','ask_question','verify_result','realign'].includes(recovery.action);
-        const contradiction = recovery.status === 'uncertain' || (modelFit.action === 'try_faster' && recovery.action !== 'none');
+        const blocker=recovery.signals.blocker;
+        const prerequisite=blocker.confidence>=.75 && blocker.probabilities[blocker.choice]!>=.8 && ['environment','missing_information','verification_gap','requirement_mismatch'].includes(blocker.choice);
+        const contradiction = recovery.reason === 'CONFLICTING_JUDGMENTS' || (modelFit.action === 'try_faster' && (recovery.action !== 'none' || recovery.status === 'uncertain'));
         if (prerequisite || contradiction) {
-          modelFit.action = 'uncertain';
+          modelFit.action = 'keep_current';
+          modelFit.decisionBasis = 'prerequisite_override';
           modelFit.basis = ['Kein Modellwechsel empfohlen: Zuerst die erkannte Voraussetzung klären oder die widersprüchlichen Einschätzungen prüfen.'];
         }
       }
       const {usage,...cleanLabels}=labels;
       const selected = pickRecommendation(input,cleanLabels);
+      if (selected.recommendation === 'HUMAN_REVIEW' && selected.reasons[0] === 'TASK_INCOMPLETE' && recovery?.status === 'uncertain') {
+        selected.recommendation = 'CONTINUE_BASELINE';
+        selected.reasons = ['BASELINE_UNCERTAIN_RECOVERY'];
+      }
       if (selected.recommendation === 'AUTO_CLOSE' && recovery && (recovery.status === 'supported' && recovery.action !== 'none' || recovery.reason === 'CONFLICTING_JUDGMENTS')) {
-        selected.recommendation = 'HUMAN_REVIEW';
+        selected.recommendation = recovery.reason === 'CONFLICTING_JUDGMENTS' ? 'CONTINUE_BASELINE' : 'HUMAN_REVIEW';
         selected.reasons = [recovery.reason === 'CONFLICTING_JUDGMENTS' ? 'RECOVERY_CONFLICT' : 'RECOVERY_NEEDED'];
       }
       return { ...base,...selected,labels:cleanLabels,...(usage ? {providerUsage:usage} : {}),...(modelFit ? {modelRecommendation:modelFit} : {}),...(recovery ? {recoveryAdvice:recovery} : {}) };
     } catch (error) {
-      return { ...base,recommendation:'HUMAN_REVIEW',reasons:[error instanceof SafeError ? error.code : 'PROVIDER_FAILURE'] };
+      return { ...base,recommendation:'CONTINUE_BASELINE',reasons:[error instanceof SafeError ? error.code : 'PROVIDER_FAILURE'] };
     } finally { clearTimeout(timer); controller.abort(); }
   }
 }
