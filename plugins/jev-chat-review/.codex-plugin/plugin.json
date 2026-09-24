@@ -1,0 +1,19 @@
+{
+  "name": "jev-chat-review",
+  "version": "0.1.0",
+  "description": "Review the current Codex agent run with Jev without copying its transcript.",
+  "author": {
+    "name": "Mindrails"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jev Chat Review",
+    "shortDescription": "Review this Codex run with Jev.",
+    "longDescription": "Send a concise, redacted summary of the current Codex run to the local Mindrails Supervisor and get an advisory triage result.",
+    "developerName": "Mindrails",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Review this Codex run with Jev. Explain what information will be sent, then return Jev's recommendation and reasons."
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -3,7 +3,8 @@
   "version": "0.2.0",
   "description": "Local MCP completion gates and loop detection for AI agents, with optional Jev evaluation. By Mindrails.",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:codex-plugin",
+    "build:codex-plugin": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node24 --outfile=plugins/jev-chat-review/server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "demo": "node dist/cli.js demo",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "24.13.6",
+    "esbuild": "^0.28.2",
     "typescript": "7.0.2"
   },
   "private": true,
@@ -32,6 +34,7 @@
   },
   "files": [
     "dist",
+    "plugins/jev-chat-review",
     "examples",
     "docs",
     "evidence",

@@ -76,6 +76,14 @@ Tested: official `@modelcontextprotocol/client` 2.0.0 over stdio. The following 
 
 On Windows use your absolute path with JSON-escaped backslashes. MCP results advise the host; this server cannot force it to continue, execute tools or switch its internal model.
 
+## Review a Codex chat (local plugin preview)
+
+The `plugins/jev-chat-review` package adds a Codex skill for the current chat. Once installed, ask Codex **“Review this chat with Jev.”** The skill builds a concise summary from the conversation already visible to Codex, so the user does not need to copy or upload a transcript. It runs only on an explicit review request and reports Jev's advisory result; it does not automatically send every chat or perform follow-up actions.
+
+The plugin starts the bundled local MCP server. Build it with `npm ci` and `npm run build` from the repository root, then make `AI_GATEWAY_API_KEY` available to the Codex desktop process. Before sending, Codex explains that the summary goes to the configured Vercel TypeSafe-compatible route and may incur charges. The skill instructs Codex to omit secrets and unrelated personal details, but this is not a deterministic redaction guarantee; users should avoid requesting review of sensitive chats until a stronger local filter is added.
+
+This is a local integration preview, not yet a published or one-click install. Codex installation still needs a local plugin marketplace entry. See [`plugins/jev-chat-review/README.md`](plugins/jev-chat-review/README.md) for the package and limits.
+
 ## Optional Jev mode (BYOK)
 
 Set `MINDRAILS_PROVIDER=jev` and supply `TYPESAFE_API_KEY` through your host's secret environment. Then use the same commands. The optional official Vercel compatibility route uses `MINDRAILS_JEV_ROUTE=vercel-ai-gateway` with `AI_GATEWAY_API_KEY`. Provider selection is mandatory for `check`, `triage` and `mcp`, preventing an accidental synthetic default or billable default. Environment files are not loaded automatically. Do not put keys in committed configuration or command history.
