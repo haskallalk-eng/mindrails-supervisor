@@ -1,4 +1,6 @@
 const reasonCopy = {
+  RECOVERY_CONFLICT: 'Die Erfolgsbewertung und die Ursachenprüfung passen nicht zusammen. Prüfe das Ergebnis.',
+  RECOVERY_NEEDED: 'Die Ursachenprüfung sieht noch einen offenen Punkt. Prüfe den vorgeschlagenen nächsten Schritt.',
   TRACE_COMPLETE_NO_USER_FEEDBACK: 'Der Lauf wirkt vollständig, aber es gibt noch keine Nutzerbestätigung.',
   TRACE_COMPLETE_AND_USER_SATISFIED: 'Der Lauf wirkt vollständig und der Nutzer hat das Ergebnis bestätigt.',
   LOW_CONFIDENCE_OR_UNCERTAIN: 'Die Belege sind nicht eindeutig. Prüfe kurz das Ergebnis oder die Tests.',
@@ -46,5 +48,10 @@ export function formatModelRecommendation(recommendation) {
     uncertain: 'Jev ist bei der Modellpassung unsicher und empfiehlt vorerst keinen Wechsel.',
   }[recommendation.action] ?? 'Jev konnte keine Modellpassung bestimmen.';
   const basis = recommendation.basis?.slice(0, 4).join(' ');
-  return `Modellhinweis (${confidence}): ${text}${basis ? ` Belege: ${basis}` : ''}`;
+  return `Modellhinweis${recommendation.action === 'uncertain' ? '' : ` (${confidence})`}: ${text}${basis ? ` Grundlage: ${basis}` : ''}`;
+}
+
+export function formatRecoveryAdvice(advice) {
+  if (!advice || advice.action === 'none') return '';
+  return `Nächster Schritt: ${advice.title}${advice.suggestedPrompt ? ` Vorschlag zum Übernehmen: „${advice.suggestedPrompt}“` : ''}`;
 }

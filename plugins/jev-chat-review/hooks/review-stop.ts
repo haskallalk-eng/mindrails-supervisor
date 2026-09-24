@@ -1,6 +1,6 @@
 import { createTraceTriage } from '../../../src/triage.js';
 import { buildTraceFromTranscript } from './codex-transcript.mjs';
-import { formatReviewCopy, formatReviewUsage, formatModelRecommendation } from './review-copy.mjs';
+import { formatReviewCopy, formatReviewUsage, formatModelRecommendation, formatRecoveryAdvice } from './review-copy.mjs';
 import { parsePositiveLimit, recordUsage, reserveReview } from './review-state.mjs';
 import { readMonitorSession, recordMonitorUsage } from './monitor-state.mjs';
 
@@ -63,7 +63,8 @@ if (hookInputTooLarge) {
     const copy = formatReviewCopy(result.recommendation, result.reasons);
     const usageLine = formatReviewUsage({ ...totals, maxCalls, maxInputBytes }, usage);
     const modelLine=formatModelRecommendation(result.modelRecommendation);
-    emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text}${modelLine ? ` ${modelLine}` : ''} ${usageLine}`);
+    const recoveryLine=formatRecoveryAdvice(result.recoveryAdvice);
+    emit(`${copy.failure ? 'Jev-Prüfung fehlgeschlagen' : 'Jev (beratend)'}: ${copy.text}${recoveryLine ? ` ${recoveryLine}` : ''}${modelLine ? ` ${modelLine}` : ''} ${usageLine}`);
   }
 } catch (error) {
   const code = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'REVIEW_FAILED';

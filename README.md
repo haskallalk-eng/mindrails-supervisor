@@ -6,6 +6,10 @@ An independent open-source project by [Mindrails](https://mindrails.de).
 
 Check explicit requirements before an agent stops, and flag repeated steps. The host remains responsible for verification, permissions and execution.
 
+**Jev recovery advice:** the optional Codex review now asks three additional focused questions in the same request: is the current work advancing, what is the dominant unresolved obstacle, and what next step fits? When the answers agree with sufficient confidence and selected probability, Mindrails presents a prepared follow-up prompt: resolve a prerequisite, ask for a missing decision, change approach, verify the result, or correct a missed requirement. Productive work gets no recovery interruption. Conflicts and uncertainty produce no action prompt; an environment blocker suppresses a contradictory model-upgrade suggestion. Jev classifies; application code selects the fixed wording. Prompts are never dispatched automatically.
+
+See [the Jev-specific product comparison and validation plan](docs/jev-product-direction.md). This is a development preview; uniqueness, productivity gains and semantic accuracy have not been established.
+
 ## Try the free offline demo
 
 Requires Node.js 24 or later and npm. No account or API key is needed.

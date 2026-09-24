@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { RecoveryLabels } from './recovery.js';
 
 const shortText = z.string().trim().min(1).max(6000);
 export const traceTriageSchema = z.object({
@@ -41,7 +42,7 @@ export const traceQuestions = {
 } as const;
 export type TraceQuestionId = keyof typeof traceQuestions;
 export type TraceLabel = { choice: string; confidence: number; probabilities: Record<string,number> };
-export type TraceLabels = Record<TraceQuestionId,TraceLabel> & { model_fit?:TraceLabel; usage?: { inputTokens:number; outputTokens:number } };
+export type TraceLabels = Record<TraceQuestionId,TraceLabel> & { recovery?:RecoveryLabels; model_fit?:TraceLabel; usage?: { inputTokens:number; outputTokens:number } };
 
 export const modelFitChoices = {
   keep_current: 'The current model handled this task at an appropriate quality level. Keep it for comparable work.',

@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import { TraceTriage } from '../dist/triage.js';
 import { JevProvider, MockProvider } from '../dist/providers.js';
 import { modelFitChoices } from '../dist/trace.js';
+import { recoveryQuestions } from '../dist/recovery.js';
+
+const wireRecovery=Object.fromEntries(Object.entries(recoveryQuestions).map(([id,criteria])=>{
+  const choice={progress:'complete',blocker:'none',next_step:'continue'}[id];
+  return [`recovery_${id}`,{type:'choice',choice,confidence:1,probabilities:Object.fromEntries(Object.keys(criteria).map(option=>[option,option===choice?1:0]))}];
+}));
 
 const input={task:'Summarize the report',instructions:'Use the supplied report only',turns:[{role:'user',content:'Please summarize.'}],toolCalls:[],finalMessage:'The report says revenue increased.'};
 const labels=(task='complete',user='no_feedback',health='healthy')=>{
@@ -68,18 +74,20 @@ test('Jev choice contract uses the fixed Vercel route, exact questions and repor
   let request;
   const choices=labels();
   const answers=Object.fromEntries(Object.entries(choices).map(([id,value])=>[id,{type:'choice',...value}]));
-  const wire={model:'typesafe-ai/jev',answers,usage:{input_tokens:91,output_tokens:12}};
+  const wire={model:'typesafe-ai/jev',answers:{...answers,...wireRecovery},usage:{input_tokens:91,output_tokens:12}};
   const result=await new TraceTriage(new JevProvider('synthetic-test-key',async(url,options)=>{request={url,options};return new Response(JSON.stringify(wire));},'vercel-ai-gateway')).evaluate(input);
   assert.equal(request.url,'https://ai-gateway.vercel.sh/typesafe/v1/systemone');
-  const body=JSON.parse(request.options.body); assert.deepEqual(Object.keys(body.questions).sort(),['run_health','task_outcome','user_outcome']);
+  const body=JSON.parse(request.options.body); assert.deepEqual(Object.keys(body.questions).sort(),['recovery_blocker','recovery_next_step','recovery_progress','run_health','task_outcome','user_outcome']);
   assert.match(body.questions.task_outcome.instructions,/untrusted data/);
   assert.equal(result.recommendation,'AUTO_CLOSE'); assert.deepEqual(result.providerUsage,{inputTokens:91,outputTokens:12});
+  assert.equal(result.recoveryAdvice.action,'none');
+  assert.equal(result.recoveryAdvice.signals.blocker.choice,'none');
 });
 test('Jev evaluates model fit using full trace and Codex telemetry in the same request',async()=>{
   let request;
   const choices=labels();
   const modelFit={choice:'keep_current',confidence:.91,probabilities:{keep_current:.91,try_more_capable:.03,try_faster:.03,uncertain:.03}};
-  const answers={...Object.fromEntries(Object.entries(choices).map(([id,value])=>[id,{type:'choice',...value}])),model_fit:{type:'choice',...modelFit}};
+  const answers={...Object.fromEntries(Object.entries(choices).map(([id,value])=>[id,{type:'choice',...value}])),...wireRecovery,model_fit:{type:'choice',...modelFit}};
   const telemetry={currentModel:'codex-balanced',toolCount:4,repeatedActions:0,latestUsage:{inputTokens:70000,cachedInputTokens:50000,outputTokens:400,reasoningOutputTokens:100,totalTokens:70500,contextWindow:200000},rateLimits:{primaryUsedPercent:35,secondaryUsedPercent:20}};
   const result=await new TraceTriage(new JevProvider('synthetic-test-key',async(url,options)=>{request={url,options};return new Response(JSON.stringify({model:'typesafe-ai/jev',answers,usage:{input_tokens:1600,output_tokens:80}}));},'vercel-ai-gateway')).evaluate({...input,telemetry});
   const body=JSON.parse(request.options.body);

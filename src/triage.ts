@@ -1,6 +1,7 @@
 import { SafeError } from './core.js';
 import { type TraceLabels, type TraceQuestionId, type TraceTriageInput, traceQuestions, traceTriageSchema, modelFitChoices } from './trace.js';
 import { JevProvider, MockProvider } from './providers.js';
+import { recoveryAdvice, type RecoveryAdvice } from './recovery.js';
 
 export interface TraceTriageProvider {
   readonly mode: 'mock' | 'jev';
@@ -16,6 +17,7 @@ export type TraceTriageResult = {
   synthetic: boolean;
   labels?: TraceLabels;
   providerUsage?: { inputTokens:number; outputTokens:number };
+  recoveryAdvice?: RecoveryAdvice;
   modelRecommendation?: { currentModel:string; action:'keep_current'|'try_more_capable'|'try_faster'|'uncertain'; confidence:number; basis:string[] };
 };
 
@@ -69,10 +71,23 @@ export class TraceTriage {
         const label = labels[id], options = Object.keys(traceQuestions[id]);
         if (!label || !options.includes(label.choice) || !Number.isFinite(label.confidence) || label.confidence < 0 || label.confidence > 1 || Object.keys(label.probabilities).length !== options.length || options.some(option => !Number.isFinite(label.probabilities[option]) || label.probabilities[option]! < 0 || label.probabilities[option]! > 1) || Math.abs(options.reduce((sum,option)=>sum+label.probabilities[option]!,0)-1) > 0.03 || Math.abs(label.probabilities[label.choice]!-Math.max(...options.map(option=>label.probabilities[option]!))) > 0.0001) throw new SafeError('INVALID_PROVIDER_RESPONSE');
       }
+      const recovery=labels.recovery ? recoveryAdvice(labels.recovery,labels) : undefined;
       const modelFit=modelRecommendation(input,labels);
+      if (modelFit && recovery && modelFit.action !== 'uncertain' && modelFit.action !== 'keep_current') {
+        const prerequisite = recovery.status === 'supported' && ['fix_environment','ask_question','verify_result','realign'].includes(recovery.action);
+        const contradiction = recovery.status === 'uncertain' || (modelFit.action === 'try_faster' && recovery.action !== 'none');
+        if (prerequisite || contradiction) {
+          modelFit.action = 'uncertain';
+          modelFit.basis = ['Kein Modellwechsel empfohlen: Zuerst die erkannte Voraussetzung klären oder die widersprüchlichen Einschätzungen prüfen.'];
+        }
+      }
       const {usage,...cleanLabels}=labels;
       const selected = pickRecommendation(input,cleanLabels);
-      return { ...base,...selected,labels:cleanLabels,...(usage ? {providerUsage:usage} : {}),...(modelFit ? {modelRecommendation:modelFit} : {}) };
+      if (selected.recommendation === 'AUTO_CLOSE' && recovery && (recovery.status === 'supported' && recovery.action !== 'none' || recovery.reason === 'CONFLICTING_JUDGMENTS')) {
+        selected.recommendation = 'HUMAN_REVIEW';
+        selected.reasons = [recovery.reason === 'CONFLICTING_JUDGMENTS' ? 'RECOVERY_CONFLICT' : 'RECOVERY_NEEDED'];
+      }
+      return { ...base,...selected,labels:cleanLabels,...(usage ? {providerUsage:usage} : {}),...(modelFit ? {modelRecommendation:modelFit} : {}),...(recovery ? {recoveryAdvice:recovery} : {}) };
     } catch (error) {
       return { ...base,recommendation:'HUMAN_REVIEW',reasons:[error instanceof SafeError ? error.code : 'PROVIDER_FAILURE'] };
     } finally { clearTimeout(timer); controller.abort(); }
