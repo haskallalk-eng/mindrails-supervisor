@@ -38,18 +38,23 @@ npm run e2e
 npm run evidence
 ```
 
-For a direct check, select the provider explicitly. Unix: `MINDRAILS_PROVIDER=mock node dist/cli.js check examples/check.json`. PowerShell: `$env:MINDRAILS_PROVIDER='mock'; node dist/cli.js check examples/check.json`. The `stuck` command is deterministic and needs no provider.
+For a direct check, select the provider explicitly. Unix: `MINDRAILS_PROVIDER=mock node dist/cli.js check examples/check.json`. PowerShell: `$env:MINDRAILS_PROVIDER='mock'; node dist/cli.js check examples/check.json`. Trace triage is available as `MINDRAILS_PROVIDER=mock node dist/cli.js triage examples/trace.json`. The `stuck` command is deterministic and needs no provider.
 
 `check <file.json>` returns an advisory decision. `stuck <file.json>` accepts `{ "steps": [{ "action": "search", "input": "q", "result": "same", "progress": false }] }`. Exit status 0 means the evaluation was returned successfully, including `continue` or `review`; the host must inspect `decision`. Invalid input/startup uses exit status 1.
 
-## Two MCP tools
+## MCP tools
 
 | Tool | Input | Result |
 | --- | --- | --- |
-| `check_completion` | task, currentResult, 1–20 unique requirements, supplied evidence; optional trustedChecks | finish / continue / review, reason codes, missing requirement IDs, raw model signals and provenance |
+| `check_completion` | task, currentResult, 1–20 unique requirements; optional evidence, evidenceMode and trustedChecks | finish / continue / review, reason codes, missing requirement IDs, raw model signals and provenance |
 | `detect_stuck` | Up to 50 caller-supplied action/input/result/progress steps; optional `allowedExtraRepetitions` from 0–2 | At least three trailing repetitions of a one-to-three-step cycle, with zero-based matched indices |
+| `triage_agent_run` | task, instructions, up to 30 transcript turns, up to 20 tool calls, final message, optional user feedback and action permission claims | AUTO_CLOSE / HUMAN_REVIEW / PRIORITY_REVIEW / FILE_ISSUE / ROUTE_PAGE_ON_CALL, reason codes, Jev labels, provider and confidence |
 
-Completion requires every requirement and task/evidence signal to reach 0.9, and contradiction signal at most 0.1. Supplied global evidence or evidence on every requirement is mandatory. Any declared `trustedChecks` entry with `fail` or `unknown` blocks completion. **Despite the field name, these checks are caller-declared, unauthenticated statuses.** An agent can lie about them; obtain checks from a trusted host boundary if you need enforcement.
+Trace triage asks Jev three fixed-choice questions: whether the task appears complete, whether the user explicitly accepts or rejects the result, and whether the run is healthy, misses expectations, overtly fails, or claims success without support. A deterministic policy maps those labels to a recommendation. Low confidence, uncertainty, incomplete work, dissatisfaction, or an expectation gap go to human review; a silent failure is prioritized; a clear failure is recommended for issue filing. Caller-reported unpermitted actions bypass Jev and are recommended for on-call review. These labels are initial heuristics, not validated production thresholds. Recommendations are advisory and never run tools, close work, create issues, page anyone, or authorize actions.
+
+The trace, transcript, tool arguments and results are caller supplied and treated as untrusted data. Permission claims are not independently verified. Mock mode uses explicit `[mock:...]` markers only and is synthetic; it does not assess real traces.
+
+Completion requires every requirement and task signal to reach 0.85, and contradiction signal at most 0.1. By default `evidenceMode` is `artifact`: Jev judges whether the requested content appears in the supplied result and does not demand external proof just to confirm the artifact's contents. Set `evidenceMode` to `fact-check` when the task requires sources or verification; then global evidence or evidence on every requirement is mandatory, and Jev's evidence score must also reach 0.85. This score is not source authentication. Any declared `trustedChecks` entry with `fail` or `unknown` blocks completion. **Evidence mode and trusted-check statuses are caller-supplied, unauthenticated claims.** Use trusted host logic for consequential verification.
 
 `finish` means this policy accepts the supplied information. It does not establish real-world success. Evidence is not fetched or independently verified. Thresholds are initial policy defaults, not calibrated guarantees. Changed results or reported progress interrupt repeat detection; four-step cycles, timestamp-changing errors and other semantic loops may go undetected. Repeat grace is caller supplied and cannot prove that polling is legitimate.
 
@@ -73,11 +78,13 @@ On Windows use your absolute path with JSON-escaped backslashes. MCP results adv
 
 ## Optional Jev mode (BYOK)
 
-Set `MINDRAILS_PROVIDER=jev` and supply `TYPESAFE_API_KEY` through your host's secret environment. Then use the same commands. The optional official Vercel compatibility route uses `MINDRAILS_JEV_ROUTE=vercel-ai-gateway` with `AI_GATEWAY_API_KEY`. Provider selection is mandatory for `check` and `mcp`, preventing an accidental synthetic default or billable default. Environment files are not loaded automatically. Do not put keys in committed configuration or command history.
+Set `MINDRAILS_PROVIDER=jev` and supply `TYPESAFE_API_KEY` through your host's secret environment. Then use the same commands. The optional official Vercel compatibility route uses `MINDRAILS_JEV_ROUTE=vercel-ai-gateway` with `AI_GATEWAY_API_KEY`. Provider selection is mandatory for `check`, `triage` and `mcp`, preventing an accidental synthetic default or billable default. Environment files are not loaded automatically. Do not put keys in committed configuration or command history.
 
-Jev mode sends task, result, requirements and supplied evidence to the selected fixed HTTPS endpoint. Inference may incur charges under the selected account. The Apache license covers this software, not either service. See [TypeSafe's API](https://docs.typesafe.ai/api), [account terms](https://typesafe.ai/legal/mca), [data policies](https://docs.typesafe.ai/legal), and [Vercel's TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe). The native adapter pins `jev-1.13.0`; the gateway adapter pins Vercel's `typesafe-ai/jev` alias. Both verify the returned model and use Noul signals only. A gateway result does not establish which native Jev version served the alias.
+Jev mode sends task, result, requirements and supplied evidence to the selected fixed HTTPS endpoint. Inference may incur charges under the selected account. The Apache license covers this software, not either service. See [TypeSafe's API](https://docs.typesafe.ai/api), [account terms](https://typesafe.ai/legal/mca), [data policies](https://docs.typesafe.ai/legal), and [Vercel's TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe). The native adapter pins `jev-1.13.0`; the gateway adapter pins Vercel's `typesafe-ai/jev` alias. Completion checks use Noul signals and trace triage uses choice signals. Both verify the returned model. A gateway result does not establish which native Jev version served the alias.
 
-The frozen twelve-case live suite was run once through Vercel's TypeSafe-compatible route on 2026-09-23: 12 requests, 7 correct, 0 false finishes, 5 false continues, and 0 provider errors. **All twelve outputs were `continue`, exactly matching an always-continue baseline at 7/12.** Provider-reported input was 6,185 tokens; the catalog-rate estimate was $0.0002474 and the account reported $0 current spend during the promotion. Jev mode is experimental and, at the fixed 0.9 threshold and current questions, is not recommended as an automated stop gate. See the [full sanitized result](evidence/results/jev-live-vercel-2026-09-23.json) and [method](docs/evidence.md).
+The initial twelve-case Jev run on 2026-09-23 returned `continue` for every case (7/12, same as an always-continue baseline). After separating artifact completion from optional source-backed fact-checking and lowering the initial signal threshold to 0.85, a follow-up run on the same hand-labeled cases scored 12/12 with no false finishes, false continues or provider errors. This is a tuned synthetic suite, not a production accuracy estimate; validate on held-out cases before relying on the gate. The run used 7,054 input tokens and its catalog-rate estimate was $0.00028216. See the [follow-up result](evidence/results/jev-live-vercel-2026-09-24.json), [initial result](evidence/results/jev-live-vercel-2026-09-23.json) and [method](docs/evidence.md).
+
+A separate eight-case set was frozen before being sent to Jev and was not used for tuning: 7/8 correct, no false finishes, one false continue on a valid JSON artifact, and no provider errors. This suggests the policy errs conservatively on some structured outputs. We did not lower thresholds based on this held-out result. See the [held-out report](evidence/results/jev-heldout-vercel-2026-09-24.json).
 
 ## Limits and privacy
 
@@ -101,7 +108,7 @@ npm test
 npm pack
 ```
 
-Tests cover policy vetoes, bounds, timeouts, malformed responses, budgets, loop detection, CLI and actual MCP transport. `npm run e2e` prints ten concrete official-client scenarios. `npm run evidence` reproduces the fixed trace comparison and deterministic-policy baselines. The datasets are synthetic; no production accuracy, cost savings or performance benchmark is claimed. See [evidence](docs/evidence.md), [architecture](docs/architecture.md), [provenance](docs/provenance.md), [security](SECURITY.md) and [contributing](CONTRIBUTING.md).
+Tests cover policy vetoes, bounds, timeouts, malformed responses, budgets, loop detection, trace triage, CLI and actual MCP transport. `npm run e2e` prints eleven concrete official-client scenarios. `npm run evidence` reproduces the fixed completion comparison and deterministic-policy baselines. The datasets are synthetic; no production accuracy, cost savings or performance benchmark is claimed. See [evidence](docs/evidence.md), [architecture](docs/architecture.md), [provenance](docs/provenance.md), [security](SECURITY.md) and [contributing](CONTRIBUTING.md).
 
 v0.2 intentionally excludes hosted MCP, persistent run state, dashboards, routing and automatic actions. Feedback on incorrect decisions is welcome using synthetic or redacted examples. No npm registry publication is provided; use the repository or GitHub release package.
 

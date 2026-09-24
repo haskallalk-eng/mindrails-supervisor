@@ -28,7 +28,7 @@ const high={requirements:{a:.99,b:.99},taskSatisfied:.99,evidenceSufficient:.99,
 const policyCases=[
   {id:'complete',expected:'finish',signals:high,checks:[{id:'tests',status:'pass'}]},
   {id:'one-missing-requirement',expected:'continue',signals:{...high,requirements:{a:.99,b:.5}}},
-  {id:'weak-evidence',expected:'continue',signals:{...high,evidenceSufficient:.5}},
+  {id:'weak-fact-check-evidence',expected:'continue',evidenceMode:'fact-check',signals:{...high,evidenceSufficient:.5}},
   {id:'contradiction',expected:'continue',signals:{...high,contradictions:.8}},
   {id:'failed-host-check',expected:'review',signals:high,checks:[{id:'tests',status:'fail'}]},
   {id:'unknown-host-check',expected:'review',signals:high,checks:[{id:'tests',status:'unknown'}]},
@@ -36,22 +36,24 @@ const policyCases=[
 const policyRows=[];
 for(const fixture of policyCases){
   const provider={mode:'mock',evaluate:async()=>fixture.signals};
-  const input={task:'Prepare a verified release',currentResult:'Candidate result',requirements:[{id:'a',description:'Document use'},{id:'b',description:'Pass checks'}],evidence:'Predeclared policy fixture',...(fixture.checks?{trustedChecks:fixture.checks}:{})};
+  const input={task:'Prepare a verified release',currentResult:'Candidate result',evidenceMode:fixture.evidenceMode ?? 'artifact',requirements:[{id:'a',description:'Document use'},{id:'b',description:'Pass checks'}],evidence:'Predeclared policy fixture',...(fixture.checks?{trustedChecks:fixture.checks}:{})};
   const actual=(await new Supervisor(provider).check(input)).decision;
   const selfReport='finish';
   const hostChecks=fixture.checks?.some(x=>x.status!=='pass')?'review':'finish';
   policyRows.push({id:fixture.id,expected:fixture.expected,selfReport,hostChecks,supervisor:actual});
 }
 const accuracy=key=>policyRows.filter(row=>row[key]===row.expected).length;
-const liveGateway=JSON.parse(readFileSync(new URL('./results/jev-live-vercel-2026-09-23.json',import.meta.url),'utf8'));
+const liveGateway=JSON.parse(readFileSync(new URL('./results/jev-live-vercel-2026-09-24.json',import.meta.url),'utf8'));
+const heldoutGateway=JSON.parse(readFileSync(new URL('./results/jev-heldout-vercel-2026-09-24.json',import.meta.url),'utf8'));
 const report={
   generatedAt:new Date().toISOString(),
-  scope:'Reproducible implementation and deterministic-policy evidence. Hand-labeled fixtures; not real traffic, Jev accuracy, calibration, latency, cost savings, or business impact.',
+  scope:'Reproducible implementation and deterministic-policy evidence. Hand-labeled fixtures; not real traffic, production Jev accuracy, calibration, latency, cost savings, or business impact.',
   traceDetection:{beforeV010:{truePositive:1,falsePositive:2,falseNegative:4,trueNegative:5},candidateDefault:confusion(traceRows),configuredGraceExamples:[
     {id:'poll-three-with-two-cycle-grace',decision:detectStuck({steps:[step('poll','running'),step('poll','running'),step('poll','running')],allowedExtraRepetitions:2}).decision},
     {id:'poll-five-exhausts-two-cycle-grace',decision:detectStuck({steps:Array(5).fill(step('poll','running')),allowedExtraRepetitions:2}).decision},
   ],rows:traceRows,limits:['The before/after confusion matrices use the same unchanged inputs; default v0.2 still flags identical polling and health traces.','Cycles longer than three steps remain outside scope.','Timestamp or otherwise changing result strings are not normalized.','Repeat allowance is a separate caller-declared grace of at most two extra cycles; it does not prove polling is legitimate.']},
   completionPolicy:{baselines:{selfReport:'Always accept the agent completion claim.',hostChecks:'Review declared fail/unknown checks; otherwise finish. No semantic signals.'},correctOfSix:{selfReport:accuracy('selfReport'),hostChecks:accuracy('hostChecks'),supervisor:accuracy('supervisor')},rows:policyRows,limits:['Signals are fixed fixtures, not Jev outputs. This isolates policy composition only.','Host check statuses and evidence remain caller supplied and unauthenticated.']},
-  semanticModelEffect:{status:'run_once',nativeTypeSafeStatus:'not_run_registration_unavailable',route:liveGateway.route,model:liveGateway.model,fixtureHash:liveGateway.fixtureHash,report:'evidence/results/jev-live-vercel-2026-09-23.json',requests:liveGateway.requests,correctOfTwelve:liveGateway.outcomes.correct,alwaysContinueCorrectOfTwelve:liveGateway.rows.filter(row=>row.expected==='continue').length,allDecisionsContinue:liveGateway.rows.every(row=>row.actual==='continue'),falseFinish:liveGateway.outcomes.falseFinish,falseContinue:liveGateway.outcomes.falseContinue,providerErrors:liveGateway.outcomes.providerErrors,inputTokens:liveGateway.inputTokens,estimatedKnownInputCostUsd:liveGateway.estimatedKnownInputCostUsd,limits:['One frozen synthetic suite is not calibration or production accuracy evidence.','The gateway alias does not establish the native Jev version.','All decisions were continue, so the observed score equals an always-continue baseline and this configuration is not recommended as an automated stop gate.']},
+  semanticModelEffect:{status:'one_tuned_follow_up',previousRun:{date:'2026-09-23',correctOfTwelve:7,alwaysContinueCorrectOfTwelve:7,allDecisionsContinue:true},nativeTypeSafeStatus:'not_run_registration_unavailable',route:liveGateway.route,model:liveGateway.model,fixtureHash:liveGateway.fixtureHash,report:'evidence/results/jev-live-vercel-2026-09-24.json',requests:liveGateway.requests,correctOfTwelve:liveGateway.outcomes.correct,alwaysContinueCorrectOfTwelve:liveGateway.rows.filter(row=>row.expected==='continue').length,allDecisionsContinue:liveGateway.rows.every(row=>row.actual==='continue'),falseFinish:liveGateway.outcomes.falseFinish,falseContinue:liveGateway.outcomes.falseContinue,providerErrors:liveGateway.outcomes.providerErrors,inputTokens:liveGateway.inputTokens,estimatedKnownInputCostUsd:liveGateway.estimatedKnownInputCostUsd,limits:['One tuned frozen synthetic suite is not calibration or production accuracy evidence.','The gateway alias does not establish the native Jev version.','The artifact/fact-check policy and confidence threshold were tuned against the earlier result. Validate on held-out examples before relying on this gate.']},
+  heldoutSemanticCheck:{status:'not_used_for_tuning',route:heldoutGateway.route,model:heldoutGateway.model,fixtureHash:heldoutGateway.fixtureHash,report:'evidence/results/jev-heldout-vercel-2026-09-24.json',requests:heldoutGateway.requests,correctOfEight:heldoutGateway.outcomes.correct,falseFinish:heldoutGateway.outcomes.falseFinish,falseContinue:heldoutGateway.outcomes.falseContinue,providerErrors:heldoutGateway.outcomes.providerErrors,inputTokens:heldoutGateway.inputTokens,estimatedKnownInputCostUsd:heldoutGateway.estimatedKnownInputCostUsd,limits:['Cases and labels were frozen before the live run; no policy tuning followed this result.','One conservative false continue occurred on a valid JSON artifact.','This independent set is still small and hand-authored.']},
 };
 console.log(JSON.stringify(report,null,2));

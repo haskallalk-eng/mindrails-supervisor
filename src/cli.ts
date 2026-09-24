@@ -4,6 +4,8 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { completionSchema, stuckSchema, Supervisor, detectStuck, SafeError } from './core.js';
 import { MockProvider, JevProvider } from './providers.js';
+import { createTraceTriage } from './triage.js';
+import { traceTriageSchema } from './trace.js';
 
 function createSupervisor() {
   const mode = process.env.MINDRAILS_PROVIDER;
@@ -18,13 +20,22 @@ function createSupervisor() {
   if (mode === 'jev' && !['typesafe','vercel-ai-gateway'].includes(route)) throw new SafeError('INVALID_JEV_ROUTE');
   const key = route === 'typesafe' ? process.env.TYPESAFE_API_KEY : process.env.AI_GATEWAY_API_KEY;
   return new Supervisor(mode === 'jev' ? new JevProvider(key ?? '',fetch,route as 'typesafe'|'vercel-ai-gateway') : new MockProvider(), {
-    maxCalls:positive('MINDRAILS_MAX_CALLS',100), maxInputBytes:positive('MINDRAILS_MAX_INPUT_BYTES',320000), timeoutMs:positive('MINDRAILS_TIMEOUT_MS',5000), threshold:0.9,
+    maxCalls:positive('MINDRAILS_MAX_CALLS',100), maxInputBytes:positive('MINDRAILS_MAX_INPUT_BYTES',320000), timeoutMs:positive('MINDRAILS_TIMEOUT_MS',5000), threshold:0.85,
   });
+}
+function createTriage() {
+  const mode=process.env.MINDRAILS_PROVIDER;
+  if (!mode) throw new SafeError('MINDRAILS_PROVIDER_REQUIRED');
+  if (!['mock','jev'].includes(mode)) throw new SafeError('INVALID_PROVIDER');
+  const route=process.env.MINDRAILS_JEV_ROUTE ?? 'typesafe';
+  if (mode==='jev' && !['typesafe','vercel-ai-gateway'].includes(route)) throw new SafeError('INVALID_JEV_ROUTE');
+  const key=route==='typesafe' ? process.env.TYPESAFE_API_KEY : process.env.AI_GATEWAY_API_KEY;
+  return createTraceTriage(mode as 'mock'|'jev',key,route as 'typesafe'|'vercel-ai-gateway');
 }
 async function main() {
   const [command, file] = process.argv.slice(2);
   if (!command || command === '--help') {
-    console.log('Mindrails Supervisor v0.2.0\nUsage: mindrails-supervisor demo | check <file.json> | stuck <file.json> | mcp\nThe demo is always synthetic. check and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev defaults to the native TypeSafe route and TYPESAFE_API_KEY. The optional Vercel route uses MINDRAILS_JEV_ROUTE=vercel-ai-gateway and AI_GATEWAY_API_KEY. Inference may cost money.'); return;
+    console.log('Mindrails Supervisor v0.2.0\nUsage: mindrails-supervisor demo | check <file.json> | triage <file.json> | stuck <file.json> | mcp\nCompletion uses artifact evidence by default. Set evidenceMode to fact-check to require source evidence. The demo is always synthetic. check, triage and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev defaults to the native TypeSafe route and TYPESAFE_API_KEY. The optional Vercel route uses MINDRAILS_JEV_ROUTE=vercel-ai-gateway and AI_GATEWAY_API_KEY. Inference may cost money.'); return;
   }
   if (command === 'demo') {
     const supervisor = new Supervisor(new MockProvider());
@@ -41,18 +52,22 @@ async function main() {
   }
   if (command === 'mcp') {
     const supervisor = createSupervisor();
+    const triage = createTriage();
     const server = new McpServer({name:'mindrails-supervisor',version:'0.2.0'});
     const format = (v:object) => ({content:[{type:'text' as const,text:JSON.stringify(v)}],structuredContent:v as Record<string,unknown>});
-    server.registerTool('check_completion', {description:'Advisory completion gate. Provider selection is explicit; mock uses synthetic markers. Evidence and trustedChecks are host supplied, not independently verified. Jev mode sends inputs to TypeSafe and may cost money.', inputSchema:completionSchema}, async input => {
+    server.registerTool('check_completion', {description:'Advisory completion gate. Provider selection is explicit; mock uses synthetic markers. Artifact mode is the default; fact-check mode requires supplied evidence, which is not independently verified. Jev mode sends inputs to TypeSafe and may cost money.', inputSchema:completionSchema}, async input => {
       try { return format(await supervisor.check(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
     });
     server.registerTool('detect_stuck', {description:'Detect at least three trailing repetitions of a one-to-three-step cycle without caller-reported progress. Optional caller-declared grace allows at most two extra repetitions. Does not evaluate semantic progress.',inputSchema:stuckSchema}, async input => format(detectStuck(input)));
+    server.registerTool('triage_agent_run', {description:'Classify a supplied agent trace and return an advisory review recommendation. Jev mode sends the supplied trace to TypeSafe and may cost money. Recommendations never execute actions; action-permission claims are caller supplied and not verified.',inputSchema:traceTriageSchema}, async input => {
+      try { return format(await triage.evaluate(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
+    });
     await server.connect(new StdioServerTransport()); return;
   }
-  if ((command === 'check' || command === 'stuck') && file) {
+  if ((command === 'check' || command === 'stuck' || command === 'triage') && file) {
     if ((await stat(file)).size > 260000) throw new SafeError('INPUT_TOO_LARGE');
     const raw = JSON.parse(await readFile(file,'utf8'));
-    console.log(JSON.stringify(command === 'check' ? await createSupervisor().check(raw) : detectStuck(raw),null,2)); return;
+    console.log(JSON.stringify(command === 'check' ? await createSupervisor().check(raw) : command === 'triage' ? await createTriage().evaluate(raw) : detectStuck(raw),null,2)); return;
   }
   throw new SafeError('INVALID_COMMAND');
 }

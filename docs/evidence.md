@@ -6,7 +6,7 @@
 2. Do deterministic vetoes add anything beyond accepting the agent's own completion claim or checking declared host statuses?
 3. Does Jev make good semantic judgments on real cases?
 
-The first two are reproducible offline. The third was run once through Vercel's official TypeSafe-compatible route; the native TypeSafe route remains unrun because new dashboard registrations were unavailable.
+The first two are reproducible offline. The semantic suite was run twice through Vercel's official TypeSafe-compatible route: first to measure the original policy and then after a policy adjustment. The native TypeSafe route remains unrun because new dashboard registrations were unavailable.
 
 ## Fixed trace cases
 
@@ -31,7 +31,7 @@ Six predeclared fixtures isolate deterministic policy composition. Fixed signals
 | Declared host checks only | 3 / 6 |
 | Supervisor deterministic policy | 6 / 6 |
 
-These cases demonstrate that separate requirement, evidence, contradiction and host-check vetoes enforce the stated invariants. They do not demonstrate that a model will produce accurate signals, nor that the fixtures represent real-world prevalence.
+These cases demonstrate the deterministic handling of requirements, explicit fact-check evidence, contradictions and host-check vetoes. Artifact mode does not make external evidence claims. They do not demonstrate that a model will produce accurate signals, nor that the fixtures represent real-world prevalence.
 
 ## End-to-end mechanics
 
@@ -39,7 +39,7 @@ These cases demonstrate that separate requirement, evidence, contradiction and h
 
 ## Preparing one live Jev check
 
-`npm run jev:suite:dry-run` prints all twelve frozen cases, labels and their fixture hash without making a network request. Execution is deliberately double gated:
+`npm run jev:suite:dry-run` prints all twelve frozen cases, labels, evidence mode and their fixture hash without making a network request. Ordinary output checks use artifact mode; the contradicted test-report case uses fact-check mode. Execution is deliberately double gated:
 
 ```sh
 MINDRAILS_ALLOW_PAID_JEV=I_UNDERSTAND_THIS_MAY_COST_MONEY \
@@ -49,9 +49,11 @@ node evidence/jev-live-suite.mjs --execute
 
 For Vercel's official TypeSafe-compatible route, also set `MINDRAILS_JEV_ROUTE=vercel-ai-gateway` and use `AI_GATEWAY_API_KEY` instead. That route reports the unversioned `typesafe-ai/jev` alias and must not be presented as a native `jev-1.13.0` result.
 
+An independent eight-case set is also available with `npm run jev:heldout:dry-run`. Its fixture hash and labels are frozen in `evidence/jev-heldout-suite.mjs`. To execute it, use the same two environment gates with `node evidence/jev-heldout-suite.mjs --execute`; it is capped at eight requests and a conservative $0.05 input-cost maximum. This set is kept separate from policy tuning.
+
 The live path makes at most twelve requests, never retries, reports provider token usage and separates false finishes, false continues, unexpected reviews and provider errors. Missing usage is counted and included in a conservative cost ceiling rather than treated as free. Native cost uses the documented $0.042 per million input tokens; the Vercel route uses the catalog rate of $0.04 per million, both checked on 2026-09-23. Output tokens are documented as free. Actual account terms and pricing control. No key is stored in the repository.
 
-## Live gateway result
+## Initial live gateway result
 
 The frozen fixture hash `11511c299e8b43a3c53fa9b2efaa6eb3dd6d227e68106feb476760146c146f2d` was executed once on 2026-09-23 through `https://ai-gateway.vercel.sh/typesafe/v1/systemone` with model alias `typesafe-ai/jev`.
 
@@ -67,6 +69,22 @@ The frozen fixture hash `11511c299e8b43a3c53fa9b2efaa6eb3dd6d227e68106feb4767601
 | Catalog-rate estimate | $0.0002474 |
 | Vercel account current spend after run | $0 |
 
-Every incomplete or contradicted case continued. All five expected finishes also continued, mainly because the provider assigned insufficient evidence under the current questions and 0.9 threshold. Since all twelve outputs were `continue`, the 7/12 score provides no improvement over an always-continue baseline. The result establishes live fail-closed connectivity, not useful recall; this configuration is not recommended as an automated stop gate. The sanitized row-level report is in [`evidence/results/jev-live-vercel-2026-09-23.json`](../evidence/results/jev-live-vercel-2026-09-23.json), SHA-256 `e9e4624b155405189effd26d79c989fee36c74e62c84e9e1874591217e0954ab`.
+Every incomplete or contradicted case continued. All five expected finishes also continued, mainly because the provider assigned insufficient evidence under the original questions and 0.9 threshold. Since all twelve outputs were `continue`, the 7/12 score provided no improvement over an always-continue baseline. This first run exposed that ordinary artifact review was incorrectly gated on external evidence.
+
+## Follow-up after the policy adjustment
+
+The fix distinguishes reviewing whether a requested artifact contains the requested material from fact-checking claims against supplied sources. `artifact` is the default; `fact-check` requires global evidence or evidence on each requirement and applies Jev's evidence signal as a hard gate. The initial completion threshold changed from 0.90 to 0.85 after the fixed set showed completed requirements scoring 0.87–0.88. The contradictory test-log case explicitly uses `fact-check`; the other cases evaluate artifact completion.
+
+On 2026-09-24, the same twelve labeled scenarios were run through the Vercel route again. Jev produced 5 `finish` and 7 `continue` decisions, matching all expected labels: **12/12, zero false finishes, zero false continues and zero provider errors**. It used 7,054 input and 1,024 output tokens; the catalog-rate estimate was $0.00028216. The sanitized row-level report is in [`evidence/results/jev-live-vercel-2026-09-24.json`](../evidence/results/jev-live-vercel-2026-09-24.json), SHA-256 `62e37431648c9b5764cf528ebee5c08ec49ec5c1a036bda5252d38ef7e094059`.
+
+This result demonstrates that the revised policy can separate these twelve hand-authored cases. The policy and prompt were adjusted after seeing the first run, so the follow-up is tuned evidence rather than an independent validation set. Do not infer production accuracy or use it as a sole authorization control. The Vercel alias also does not establish which native Jev version served the call.
+
+## Independent held-out check
+
+The separately frozen eight-case set was executed once on 2026-09-24 through Vercel, after the 0.85 threshold and evidence modes were fixed. It scored **7/8**, with 0 false finishes, 1 false continue and 0 provider errors. The false continue was a valid JSON artifact: Jev rated each explicit requirement at 0.96 or higher, but also returned task satisfaction 0.78 and contradiction 0.25, so the gate conservatively continued. We left the threshold and policy unchanged after seeing this result.
+
+Provider usage was 4,596 input and 660 output tokens; the catalog-rate estimate was $0.00018384. The sanitized report is [`evidence/results/jev-heldout-vercel-2026-09-24.json`](../evidence/results/jev-heldout-vercel-2026-09-24.json), SHA-256 `9b08149861bd607442c3d788d1843fb188fbdac3624ef4d33a9824560d31cc12`.
+
+This adds an independent check against the tuned twelve-case suite, but eight hand-authored examples remain too few to infer real-world accuracy. The false continue also shows the global task/contradiction signals can override strong requirement-level scores on structured output.
 
 The official documentation also says English is the primary training language and lists weaknesses involving literal wording, numbers, indirection, irrelevant context and adversarial content. A useful semantic evaluation needs pre-labeled cases covering those boundaries; a single successful call would establish connectivity, not accuracy.
