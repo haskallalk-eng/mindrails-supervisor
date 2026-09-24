@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { buildTraceFromTranscript } from '../plugins/jev-chat-review/hooks/codex-transcript.mjs';
 import { parsePositiveLimit, recordUsage, reserveReview } from '../plugins/jev-chat-review/hooks/review-state.mjs';
 import { formatReviewCopy, formatReviewUsage } from '../plugins/jev-chat-review/hooks/review-copy.mjs';
+import { readMonitorView, recordMonitorEvent } from '../plugins/jev-chat-review/hooks/monitor-state.mjs';
 
 async function transcript(t, rows) {
   const dir = await mkdtemp(join(tmpdir(), 'jev-hook-'));
@@ -65,6 +66,34 @@ test('daily limit configuration accepts safe positive values only', () => {
   assert.equal(parsePositiveLimit('7', 20, 500), 7);
   assert.throws(() => parsePositiveLimit('0', 20, 500), /REVIEW_BUDGET_CONFIG_INVALID/);
   assert.throws(() => parsePositiveLimit('1.5', 20, 500), /REVIEW_BUDGET_CONFIG_INVALID/);
+});
+
+test('local chat monitor stores derived data only and flags repeated actions and long turns', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'jev-monitor-state-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const base = Date.parse('2026-09-24T10:00:00.000Z');
+  await recordMonitorEvent(dir, { hook_event_name:'SessionStart', session_id:'session-secret', cwd:'C:\\work\\project', model:'codex-fast' }, base);
+  await recordMonitorEvent(dir, { hook_event_name:'UserPromptSubmit', session_id:'session-secret', model:'codex-fast', prompt:'Fix this repeated bug' }, base + 1000);
+  for (let i=0;i<3;i++) await recordMonitorEvent(dir, { hook_event_name:'PostToolUse', session_id:'session-secret', tool_name:'read_file', tool_input:{path:'src/main.ts'}, tool_response:'same output token-secret-value' }, base + 2000 + i);
+  const view = await readMonitorView(dir, base + 11 * 60_000);
+  assert.equal(view.activeChats, 1);
+  assert.equal(view.apiCallsForMonitoring, 0);
+  assert.equal(view.chats[0].project, 'project');
+  assert.equal(view.chats[0].activeMinutes, 11);
+  assert.deepEqual(view.chats[0].recommendations.map((item) => item.kind), ['long-running','possible-loop']);
+  const saved = await readFile(join(dir,'jev-chat-monitor-state.json'),'utf8');
+  assert.doesNotMatch(saved, /session-secret|same output token-secret-value|main\.ts/);
+  assert.match(saved, /codex-fast/);
+});
+
+test('local monitor only suggests a smaller model for a simple task after the turn ends', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'jev-monitor-simple-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const now = Date.now();
+  await recordMonitorEvent(dir, { hook_event_name:'UserPromptSubmit', session_id:'small-task', prompt:'What is 2 + 2?' }, now);
+  await recordMonitorEvent(dir, { hook_event_name:'Stop', session_id:'small-task' }, now + 1000);
+  const view = await readMonitorView(dir, now + 2000);
+  assert.deepEqual(view.chats[0].recommendations.map((item) => item.kind), ['smaller-model']);
 });
 
 test('review feedback is actionable German and exposes usage without claiming a price', () => {

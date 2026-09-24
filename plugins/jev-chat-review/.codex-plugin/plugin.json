@@ -1,19 +1,19 @@
 {
   "name": "jev-chat-review",
   "version": "0.1.0",
-  "description": "Automatically review completed Codex agent runs with Jev.",
+  "description": "Monitor open Codex chats locally and optionally review completed turns with Jev.",
   "author": {
     "name": "Mindrails"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Jev Chat Review",
-    "shortDescription": "Automatic advisory review after each Codex run.",
-    "longDescription": "After each completed Codex agent turn, Jev reviews the local conversation transcript and recorded tool activity. Requires your AI Gateway key; conversation data is sent to the provider and may incur charges. Includes local daily usage limits, German guidance, and an advisory result.",
+    "shortDescription": "Local overview for open Codex chats, plus optional Jev review.",
+    "longDescription": "Open Codex chats can be monitored locally for long-running turns and repeated tool calls, with simple advisory model-fit hints. This monitoring stores only derived signals and makes no AI/API calls. Optional Jev review after completed turns requires your AI Gateway key; chat data is sent to the provider and may incur charges.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "Jev reviews each completed Codex run automatically and provides an advisory result."
+    "defaultPrompt": "Show me my open Codex chats and any local Jev monitoring suggestions."
   },
   "mcpServers": "./.mcp.json"
 }

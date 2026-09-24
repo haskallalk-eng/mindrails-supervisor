@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { completionSchema, stuckSchema, Supervisor, detectStuck, SafeError } from './core.js';
@@ -51,16 +52,46 @@ async function main() {
     return;
   }
   if (command === 'mcp') {
-    const supervisor = createSupervisor();
-    const triage = createTriage();
     const server = new McpServer({name:'mindrails-supervisor',version:'0.2.0'});
+    let supervisor: Supervisor | undefined;
+    let triage: ReturnType<typeof createTriage> | undefined;
+    const getSupervisor = () => supervisor ??= createSupervisor();
+    const getTriage = () => triage ??= createTriage();
     const format = (v:object) => ({content:[{type:'text' as const,text:JSON.stringify(v)}],structuredContent:v as Record<string,unknown>});
+    const formatChatOverview = (view: {activeChats:number;monitoredLocally:boolean;apiCallsForMonitoring:number;chats:Array<{id:string;project:string;model:string;status:string;activeMinutes:number;turnMinutes:number;toolCount:number;recommendations:string[]}>;note?:string}) => {
+      const header = view.monitoredLocally ? `Jev überwacht ${view.activeChats} offene Codex-Chats lokal. Die Überwachung hat 0 API-Aufrufe verwendet.` : 'Die lokale Chat-Überwachung ist in diesem Codex-Host nicht verfügbar.';
+      const rows = view.chats.map(chat => `• ${chat.project} (${chat.id}) — ${chat.model}; ${chat.status}; offen ${chat.activeMinutes} Min.; aktueller Durchlauf ${chat.turnMinutes} Min.; ${chat.toolCount} Tool-Aufrufe${chat.recommendations.length ? `\n  ${chat.recommendations.map(hint => `Hinweis: ${hint}`).join('\n  ')}` : ''}`).join('\n');
+      return {content:[{type:'text' as const,text:[header,rows,view.note ?? ''].filter(Boolean).join('\n')}],structuredContent:view as Record<string,unknown>};
+    };
+    server.registerTool('open_codex_chats', {description:'Show locally monitored Codex chats, running time, possible repeated tool calls, and cautious model-fit hints. Monitoring stores no conversation text and makes no AI/API calls. Model-fit hints are simple heuristics, not a model benchmark.', inputSchema:{}}, async () => {
+      try {
+        const dataDir = process.env.PLUGIN_DATA;
+        if (!dataDir) return formatChatOverview({activeChats:0,monitoredLocally:false,apiCallsForMonitoring:0,chats:[],note:'Plugin-local storage is not available in this host.'});
+        const state = JSON.parse(await readFile(join(dataDir,'jev-chat-monitor-state.json'),'utf8'));
+        const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+        const now = Date.now();
+        const chats = sessions.filter((s: any) => s.status !== 'ended' && now - Date.parse(s.updatedAt) < 24 * 60 * 60 * 1000).map((s: any) => {
+          const actions = Array.isArray(s.actions) ? s.actions.slice(-6) : [];
+          const hints: string[] = [];
+          const started = Date.parse(s.turnStartedAt ?? '');
+          if (s.status === 'working' && Number.isFinite(started) && now - started >= 10 * 60 * 1000) hints.push('Dieser Durchlauf läuft seit über 10 Minuten. Prüfe, ob er noch Fortschritt macht.');
+          if (actions.length >= 3 && actions.slice(-3).every((a: any) => a.signature === actions.at(-1)?.signature)) hints.push('Die letzten drei Tool-Aufrufe wiederholen dieselbe Aktion. Prüfe Ergebnis und ändere den Ansatz.');
+          if ((s.loopCount ?? 0) >= 2) hints.push('Mehrere Wiederholungen erkannt. Ein stärkeres Modell könnte helfen; alternativ den Auftrag in kleinere Schritte teilen.');
+          else if (s.taskComplexity === 'simple' && (s.toolCount ?? 0) <= 1 && s.status !== 'working') hints.push('Der Auftrag wirkte einfach und brauchte kaum Werkzeuge. Für ähnliche Aufgaben könnte ein kleineres, schnelleres Modell reichen.');
+          return {id:String(s.id).slice(0,8),project:s.project ?? 'Codex',model:s.model || 'unbekannt',status:s.status,activeMinutes:Math.max(0,Math.floor((now-Date.parse(s.startedAt))/60000)),turnMinutes:Number.isFinite(started)?Math.max(0,Math.floor((now-started)/60000)):0,toolCount:s.toolCount ?? 0,recommendations:hints};
+        });
+        return formatChatOverview({activeChats:chats.length,monitoredLocally:true,apiCallsForMonitoring:0,chats});
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return formatChatOverview({activeChats:0,monitoredLocally:true,apiCallsForMonitoring:0,chats:[]});
+        return {isError:true,content:[{type:'text' as const,text:'MONITOR_STATE_UNAVAILABLE'}]};
+      }
+    });
     server.registerTool('check_completion', {description:'Advisory completion gate. Provider selection is explicit; mock uses synthetic markers. Artifact mode is the default; fact-check mode requires supplied evidence, which is not independently verified. Jev mode sends inputs to TypeSafe and may cost money.', inputSchema:completionSchema}, async input => {
-      try { return format(await supervisor.check(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
+      try { return format(await getSupervisor().check(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
     });
     server.registerTool('detect_stuck', {description:'Detect at least three trailing repetitions of a one-to-three-step cycle without caller-reported progress. Optional caller-declared grace allows at most two extra repetitions. Does not evaluate semantic progress.',inputSchema:stuckSchema}, async input => format(detectStuck(input)));
     server.registerTool('triage_agent_run', {description:'Classify a supplied agent trace and return an advisory review recommendation. Jev mode sends the supplied trace to TypeSafe and may cost money. Recommendations never execute actions; action-permission claims are caller supplied and not verified.',inputSchema:traceTriageSchema}, async input => {
-      try { return format(await triage.evaluate(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
+      try { return format(await getTriage().evaluate(input)); } catch { return {isError:true,content:[{type:'text' as const,text:'INVALID_INPUT'}]}; }
     });
     await server.connect(new StdioServerTransport()); return;
   }
