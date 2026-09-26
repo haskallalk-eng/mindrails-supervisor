@@ -2,6 +2,8 @@
 
 ## Unreleased — local Jev calibration update
 
+- Claude Code: Jev sets the effort for every message itself and switches the model with one click ("Jev folgen"). This works through ten plugin skills whose `model`/`effort` frontmatter applies to the rest of the message. The next prompt checks in the transcript what really ran; `#jev status` shows it. Codex keeps the hold-and-resend flow because it has no override interface. Plugins 0.5.0.
+
 - Weighted practitioner/user model spectrum (668 model/task and 171 effort statements; credibility × quality × recency weighting) in `src/model-spectrum.ts`, rebuilt by `npm run spectrum`: vetoes benchmark picks that credible voices rate weak for the task, decides where no benchmark exists, and sets effort per model (plugins 0.4.0).
 
 - Jev plugins for Claude Code (`plugins/jev-claude`) and Codex (`plugins/jev-codex`), installable from this repo's marketplaces; one self-contained hook bundle, no build step.

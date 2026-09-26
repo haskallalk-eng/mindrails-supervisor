@@ -6,7 +6,7 @@ var __export = (target, all) => {
 };
 
 // src/jev-hook.ts
-import { mkdirSync, writeFileSync, renameSync, readFileSync as readFileSync3, openSync as openSync3, readSync as readSync3, closeSync as closeSync3, statSync as statSync3, realpathSync, appendFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync, readFileSync as readFileSync3, openSync as openSync3, readSync as readSync3, closeSync as closeSync3, statSync as statSync3, realpathSync, appendFileSync, rmSync } from "node:fs";
 import { join as join3 } from "node:path";
 import { createHash } from "node:crypto";
 import { homedir as homedir3 } from "node:os";
@@ -21709,6 +21709,7 @@ function stateDirectory() {
 // src/jev-hook.ts
 var SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var PASS_WINDOW_MS = 15 * 6e4;
+var SHORT_PROMPT = 20;
 function writeJson(file2, value) {
   mkdirSync(join3(file2, ".."), { recursive: true });
   const tmp = `${file2}.${process.pid}.tmp`;
@@ -21745,6 +21746,7 @@ function sameModel(current, recommended, tiers = CLAUDE_TIERS) {
   const t = tierOf(current, tiers);
   return Boolean(t) && (t.id === recommended || t.id === tierOf(recommended, tiers)?.id);
 }
+var sameKey = (a, b) => !!a && !!b && (modelKey(a) ?? a.toLowerCase()) === (modelKey(b) ?? b.toLowerCase());
 function parseJevCommand(prompt) {
   const m = /^\s*#jev(\?)?(?:\s+([\s\S]*))?$/i.exec(prompt);
   if (!m) return null;
@@ -21753,6 +21755,7 @@ function parseJevCommand(prompt) {
   if (rest && /^(an|ein|on)$/i.test(rest)) return { kind: "guard", enabled: true };
   if (rest && /^(aus|off)$/i.test(rest)) return { kind: "guard", enabled: false };
   if (rest && /^(hilfe|help|\?)$/i.test(rest)) return { kind: "help" };
+  if (rest && /^status$/i.test(rest)) return { kind: "status" };
   return { kind: "analyze", task: rest };
 }
 function currentModel(transcriptPath) {
@@ -21772,11 +21775,15 @@ function currentModel(transcriptPath) {
     return null;
   }
 }
+var settingsModel = (settingsPath = join3(homedir3(), ".claude", "settings.json")) => {
+  const model = readJson(settingsPath)?.model;
+  return typeof model === "string" && model ? model : null;
+};
 function effectiveModel(transcriptPath, settingsPath = join3(homedir3(), ".claude", "settings.json")) {
-  return currentModel(transcriptPath) ?? (typeof readJson(settingsPath)?.model === "string" ? readJson(settingsPath).model : null);
+  return currentModel(transcriptPath) ?? settingsModel(settingsPath);
 }
 var CLAUDE_EFFORT_IDS = ["low", "medium", "high", "xhigh", "max"];
-function claudeProfile(event) {
+function claudeProfile(event, running) {
   const path = String(event.transcript_path ?? "");
   return {
     kind: "claude",
@@ -21784,7 +21791,7 @@ function claudeProfile(event) {
     tiers: CLAUDE_TIERS,
     candidates: Object.keys(MODEL_FACTS).filter((k) => MODEL_FACTS[k].app === "claude"),
     readTurns: () => readClaudeSession(path),
-    current: () => ({ model: effectiveModel(path), effort: null }),
+    current: () => running ?? { model: effectiveModel(path), effort: null },
     // Haiku 4.5 has no effort setting; the Claude 5 family offers low…max.
     efforts: (model) => /haiku/i.test(model) ? [] : CLAUDE_EFFORT_IDS,
     display: (model) => model ? MODEL_FACTS[modelKey(model) ?? ""]?.label ?? modelDisplay(model) : "unbekannt"
@@ -21809,6 +21816,18 @@ var pct = (p) => `${Math.round((p ?? 0) * 100)} %`;
 var num = (n) => n.toFixed(1).replace(".", ",");
 var KIND_LABEL = { coding: "Coding", agentic: "Agent/Terminal", reasoning: "Denken/Analyse", research: "Recherche", simple: "Einfach" };
 var DIFF_LABEL = { easy: "leicht", normal: "normal", hard: "schwer" };
+function effortFor(model, r, app) {
+  const offered = model ? app.efforts(model) : app.kind === "claude" ? CLAUDE_EFFORT_IDS : [];
+  const kind = r.taskKind?.choice ?? "coding";
+  const fromSpectrum = model ? spectrumEffort(model, kind) : null;
+  const useSpectrum = !!fromSpectrum && offered.includes(fromSpectrum.effort);
+  const effort = useSpectrum ? fromSpectrum.effort : pickEffort(r.effort, offered);
+  return {
+    effort,
+    source: effort ? useSpectrum ? "erfahrung" : "jev" : null,
+    avoidFrom: useSpectrum && fromSpectrum.avoidFrom && offered.includes(fromSpectrum.avoidFrom) ? fromSpectrum.avoidFrom : null
+  };
+}
 function recommend(r, app) {
   const cur = app.current();
   const policy = r.taskKind && r.difficulty ? decideModel({ kind: r.taskKind.choice, difficulty: r.difficulty.choice, current: cur.model, candidates: app.candidates }) : null;
@@ -21840,20 +21859,15 @@ function recommend(r, app) {
     why = `Keine vergleichbaren Benchmarkwerte f\xFCr ${app.display(cur.model)} \u2013 Jevs Stufen-Einsch\xE4tzung: ${d.recommended.label} (${pct(r.nextModel.probabilities[d.recommended.id])})` + (d.reason === "same-tier" ? ", gleiche Stufe \u2013 passt." : d.reason === "unclear" ? ", nicht deutlich genug f\xFCr einen Wechsel." : d.reason === "unknown-current" ? ", aktuelles Modell unbekannt." : ".");
     if (d.reason === "same-tier" || d.reason === "unclear" || d.reason === "unknown-current") model = cur.model ?? model;
   }
-  const effortModel = model ?? cur.model ?? "";
-  const kind = r.taskKind?.choice ?? "coding";
-  const fromSpectrum = spectrumEffort(effortModel, kind);
-  const offered = app.efforts(effortModel);
-  const useSpectrum = fromSpectrum && offered.includes(fromSpectrum.effort);
-  const effort = useSpectrum ? fromSpectrum.effort : pickEffort(r.effort, offered);
+  const e = effortFor(model ?? cur.model, r, app);
   return {
     model,
     interrupt,
     why,
     basis,
-    effort,
-    effortSource: effort ? useSpectrum ? "erfahrung" : "jev" : null,
-    effortAvoidFrom: useSpectrum && fromSpectrum.avoidFrom && offered.includes(fromSpectrum.avoidFrom) ? fromSpectrum.avoidFrom : null,
+    effort: e.effort,
+    effortSource: e.source,
+    effortAvoidFrom: e.avoidFrom,
     currentEffort: cur.effort,
     current: cur.model,
     policy
@@ -21864,7 +21878,8 @@ var HELP = (app = "Claude") => [
   "  #jev               \u2013 diesen Chat analysieren",
   "  #jev <Aufgabe>     \u2013 Modell + Effort f\xFCr die Aufgabe empfehlen",
   "  #jev? <Frage>      \u2013 Ja/Nein-Frage zum Chat, Antwort in %",
-  "  #jev an / #jev aus \u2013 W\xE4chter f\xFCr DIESEN Chat: jede neue Nachricht erst von Jev pr\xFCfen lassen"
+  app === "Claude" ? "  #jev an / #jev aus \u2013 f\xFCr DIESEN Chat: Effort stellt Jev pro Nachricht selbst ein, ein Modellwechsel braucht einen Klick" : "  #jev an / #jev aus \u2013 W\xE4chter f\xFCr DIESEN Chat: jede neue Nachricht erst von Jev pr\xFCfen lassen",
+  "  #jev status        \u2013 was Jev in diesem Chat eingestellt hat und was wirklich lief"
 ].join("\n");
 function formatResult(r, description, app, opts = {}) {
   if (!r.ok) return `Jev konnte nicht antworten (${r.reason}). Keine Werte erfunden, kein Neuversuch.`;
@@ -21883,10 +21898,317 @@ function formatResult(r, description, app, opts = {}) {
   lines.push(`  Chat:    ${L.progress[r.progress.choice] ?? r.progress.choice} \xB7 Hindernis: ${L.blocker[r.blocker.choice] ?? r.blocker.choice} \xB7 n\xE4chster Schritt: ${L.next_step[r.next_step.choice] ?? r.next_step.choice}`);
   if (r.question) lines.push(`  Frage:   \u201E${r.question.text}\u201C \u2192 ${pct(r.question.yes)} ja`);
   if (opts.guard) lines.push("", "Weiter: Modell/Effort im Modellmen\xFC umstellen, dann dieselbe Nachricht nochmal senden (\u2191 und Enter).", "Nochmal senden ohne Umstellen = Jev ignorieren. W\xE4chter ausschalten: #jev aus");
-  else if (r.taskKind) lines.push("", "\xDCbernehmen: Modell/Effort im Modellmen\xFC umstellen und die Aufgabe ohne \u201E#jev\u201C senden.");
+  else if (r.taskKind) lines.push("", app.kind === "claude" ? "Automatisch \xFCbernehmen: #jev an \u2013 dann stellt Jev den Effort pro Nachricht selbst ein, ein Modellwechsel braucht einen Klick." : "\xDCbernehmen: Modell/Effort im Modellmen\xFC umstellen und die Aufgabe ohne \u201E#jev\u201C senden.");
   lines.push(`Gelesen: ${description ?? "\u2013"} \xB7 ${r.usage.input_tokens} Tokens. Benchmarks Stand ${BENCHMARKS_AS_OF}; Jev ordnet nur die Aufgabe ein \u2013 keine Garantie.`);
   return lines.join("\n");
 }
+var SKILL_MODELS = {
+  "claude-fable-5-1": "claude-fable-5-1",
+  "claude-opus-5-5": "claude-opus-5-5",
+  "claude-opus-5": "claude-opus-5",
+  "claude-sonnet-5": "claude-sonnet-5",
+  "claude-haiku-4-5": "claude-haiku-4-5-20251001"
+};
+var SKILL_EFFORTS = CLAUDE_EFFORT_IDS;
+function modelSkill(model) {
+  const k = modelKey(model);
+  return k && SKILL_MODELS[k] ? `jev:model-${k.replace(/^claude-/, "")}` : null;
+}
+var effortSkill = (effort) => effort && CLAUDE_EFFORT_IDS.includes(effort) ? `jev:effort-${effort}` : null;
+function skillsFor(model, effort, menu) {
+  const skills = [];
+  if (model && !sameKey(model, menu.model)) {
+    const s = modelSkill(model);
+    if (s) skills.push(s);
+  }
+  if (effort && effort !== menu.effort) {
+    const s = effortSkill(effort);
+    if (s) skills.push(s);
+  }
+  return skills;
+}
+function lastClaudeTurn(transcriptPath, maxBytes = 32 * 1024 * 1024) {
+  let text2;
+  try {
+    const size = statSync3(transcriptPath).size, len = Math.min(size, maxBytes);
+    const fd = openSync3(transcriptPath, "r");
+    const buf = Buffer.alloc(len);
+    try {
+      readSync3(fd, buf, 0, len, size - len);
+    } finally {
+      closeSync3(fd);
+    }
+    text2 = buf.toString("utf8");
+    if (len < size) text2 = text2.slice(text2.indexOf("\n") + 1);
+  } catch {
+    return null;
+  }
+  let turn = null, answered = null;
+  for (const line of text2.split("\n")) {
+    let o;
+    try {
+      o = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (o.isSidechain) continue;
+    if (o.type === "user") {
+      if (!o.isMeta && userText(o.message?.content)) turn = { menu: { model: null, effort: null }, ran: { model: null, effort: null }, jevSkills: [], asked: false };
+      continue;
+    }
+    const model = o.type === "assistant" ? o.message?.model : null;
+    if (!turn || typeof model !== "string" || model === "<synthetic>" || o.isApiErrorMessage) continue;
+    const effort = typeof o.effort === "string" ? o.effort : null, perTurn = typeof o.perTurnEffort === "string" ? o.perTurnEffort : effort;
+    if (!turn.menu.model) turn.menu = { model, effort: effort ?? perTurn };
+    turn.ran = { model, effort: perTurn };
+    for (const b of Array.isArray(o.message?.content) ? o.message.content : []) {
+      if (b?.type !== "tool_use") continue;
+      if (b.name === "Skill" && typeof b.input?.skill === "string" && b.input.skill.startsWith("jev:")) turn.jevSkills.push(b.input.skill);
+      if (b.name === "AskUserQuestion" && JSON.stringify(b.input ?? {}).includes("Jev empfiehlt")) turn.asked = true;
+    }
+    answered = turn;
+  }
+  return answered;
+}
+var chatFile = (stateDir, session) => join3(stateDir, "chats", `${session.replace(/[^0-9a-z-]/gi, "")}.json`);
+function readChatState(stateDir, session) {
+  return readJson(chatFile(stateDir, session)) ?? {};
+}
+function writeChatState(stateDir, session, state) {
+  if (state && Object.keys(state).length) writeJson(chatFile(stateDir, session), state);
+  else try {
+    rmSync(chatFile(stateDir, session));
+  } catch {
+  }
+}
+var effortName = (e) => e ? EFFORTS.find((x) => x.id === e)?.label ?? e : null;
+var showSetting = (display, s) => [s.model ? display(s.model) : "Modell unbekannt", /haiku/i.test(s.model ?? "") ? null : effortName(s.effort)].filter(Boolean).join(" \xB7 ");
+var ranAsExpected = (expected, ran) => (!expected.model || sameKey(ran.model, expected.model)) && (!expected.effort || !ran.effort || ran.effort === expected.effort);
+function settleChat(prev, turn, menu, display) {
+  const state = { ...prev };
+  const events = [];
+  let warning = null;
+  const ran = turn?.ran ?? null;
+  const record2 = (expected, r) => {
+    const ok = ranAsExpected(expected, r);
+    state.lastCheck = { at: (/* @__PURE__ */ new Date()).toISOString(), expected: showSetting(display, expected), ran: showSetting(display, r), ok };
+    if (!ok) warning = `\u26A0 letzte Nachricht lief auf ${state.lastCheck.ran} statt ${state.lastCheck.expected}`;
+    return ok;
+  };
+  if (state.pendingAsk) {
+    const p = state.pendingAsk;
+    delete state.pendingAsk;
+    const skill = modelSkill(p.model);
+    if (ran && sameKey(ran.model, p.model)) {
+      if (sameKey(p.model, menu.model)) delete state.jevModel;
+      else state.jevModel = p.model;
+      delete state.declinedModel;
+      if (p.effort) state.lastEffort = p.effort;
+      else delete state.lastEffort;
+      events.push({ event: "accepted", model: p.model, ok: record2({ model: p.model, effort: p.effort }, ran), ran });
+    } else if (ran && skill && turn.jevSkills.includes(skill)) {
+      state.declinedModel = p.model;
+      events.push({ event: "not-applied", model: p.model, ran });
+      warning = `\u26A0 \u201EJev folgen\u201C gew\xE4hlt, aber Claude Code hat ${display(p.model)} nicht angewendet (lief auf ${showSetting(display, ran)})`;
+    } else if (turn?.asked) {
+      state.declinedModel = p.model;
+      if (p.stayEffort) state.lastEffort = p.stayEffort;
+      else delete state.lastEffort;
+      events.push({ event: "declined", model: p.model, ran });
+    } else events.push({ event: "not-asked", model: p.model, ran });
+  }
+  if (state.expect) {
+    const expected = state.expect;
+    delete state.expect;
+    if (ran) events.push({ event: "applied", ok: record2(expected, ran), expected, ran });
+  }
+  if (state.jevModel && sameKey(state.jevModel, menu.model)) delete state.jevModel;
+  return { state, events, warning };
+}
+function shortWhy(rec, app, target, running) {
+  const p = rec.policy, d = app.display;
+  if (p?.basis === "benchmark" || p?.basis === "spectrum") {
+    const score = (m) => p.scores.find((x) => sameKey(x.model, m))?.score;
+    const fmt = (n) => n === void 0 ? "?" : p.basis === "benchmark" ? num(n) : `${n > 0 ? "+" : ""}${n}`;
+    const head = p.basis === "benchmark" ? BENCHMARKS[p.benchmark].name : "Erfahrungswerte";
+    return `${head}: ${d(target)} ${fmt(score(target))} \xB7 ${d(running)} ${fmt(score(running))}` + (p.reason === "saving" ? ` \u2013 gleich gut, mind. ${Math.round(MIN_SAVING * 100)} % g\xFCnstiger` : p.reason === "current-vetoed" ? ` \u2013 ${d(running)} gilt hier als schwach` : "");
+  }
+  if (p?.basis === "simple") return `einfache Aufgabe, reicht und kostet mind. ${Math.round(MIN_SAVING * 100)} % weniger`;
+  return "Jev-Einsch\xE4tzung der Aufgabe";
+}
+function decideClaude(r, app) {
+  const running = app.current().model;
+  const rec = recommend(r, app);
+  const switchModel = rec.interrupt && !!rec.model && !!running && !sameKey(rec.model, running);
+  const model = switchModel ? rec.model : running;
+  return {
+    model,
+    effort: effortFor(model, r, app).effort,
+    stayEffort: effortFor(running, r, app).effort,
+    switchModel,
+    why: shortWhy(rec, app, model, running),
+    reason: rec.policy && "reason" in rec.policy ? rec.policy.reason : null
+  };
+}
+function planClaudeMessage(input2) {
+  const { menu, decision, display } = input2;
+  const state = { ...input2.state };
+  const running = state.jevModel ?? menu.model;
+  const show = (model, effort2) => showSetting(display, { model, effort: effort2 ?? menu.effort });
+  const menuNote = (skills2) => skills2.length && menu.model ? ` (Men\xFC: ${showSetting(display, menu)})` : "";
+  if (!decision) {
+    const effort2 = state.lastEffort ?? null;
+    const skills2 = skillsFor(running, effort2, menu);
+    if (skills2.length) state.expect = { model: running, effort: effort2 ?? menu.effort };
+    else delete state.expect;
+    return { skills: skills2, ask: null, state, event: "kept", notice: skills2.length ? `l\xE4uft wie zuletzt auf ${show(running, effort2)}${menuNote(skills2)}` : "" };
+  }
+  if (decision.switchModel && decision.model && !sameKey(decision.model, state.declinedModel)) {
+    const follow = skillsFor(decision.model, decision.effort, menu), stay = skillsFor(running, decision.stayEffort, menu);
+    state.pendingAsk = { model: decision.model, effort: decision.effort, stayEffort: decision.stayEffort, at: Date.now() };
+    delete state.expect;
+    const target = show(decision.model, decision.effort);
+    const now2 = sameKey(running, menu.model) ? showSetting(display, menu) : display(running);
+    const stayEffortNote = decision.stayEffort && decision.stayEffort !== menu.effort && stay.length ? `Effort nur auf ${effortName(decision.stayEffort)}.` : "Nichts umstellen.";
+    return {
+      skills: [],
+      state,
+      event: "asked",
+      notice: `empfiehlt ${target} \u2013 Claude fragt gleich nach, ein Klick auf \u201EJev folgen\u201C stellt um.`,
+      ask: {
+        question: `Jev empfiehlt ${target} statt ${now2}. Umstellen?`,
+        follow: { label: "Jev folgen", description: `${target} \u2013 ${decision.why}. Gilt dann f\xFCr diesen Chat.`, skills: follow },
+        stay: { label: `${display(running)} behalten`, description: stayEffortNote, skills: stay }
+      }
+    };
+  }
+  const declined = decision.switchModel ? state.declinedModel : void 0;
+  if (!decision.switchModel) delete state.declinedModel;
+  const effort = decision.stayEffort;
+  const skills = skillsFor(running, effort, menu);
+  if (effort) state.lastEffort = effort;
+  else delete state.lastEffort;
+  state.expect = { model: running, effort: effort ?? menu.effort };
+  const now = show(running, effort);
+  const text2 = !running ? skills.length ? `Effort f\xFCr diese Nachricht: ${effortName(effort)} (Modell noch unbekannt \u2013 erst nach der ersten Antwort in diesem Chat)` : "" : skills.length ? `diese Nachricht l\xE4uft auf ${now}${menuNote(skills)}` : `${now} passt`;
+  return {
+    skills,
+    ask: null,
+    state,
+    event: skills.length ? "auto" : "passed",
+    notice: text2 + (declined ? ` \u2013 Wechsel zu ${display(declined)} hattest du abgelehnt` : "")
+  };
+}
+var JEV_HEAD = "Hinweis des Jev-Plugins (vom Nutzer mit \u201E#jev an\u201C f\xFCr diesen Chat eingeschaltet; es stellt Modell und Effort nur f\xFCr diese eine Nachricht um):";
+var callSkills = (skills) => skills.length > 1 ? `das Skill-Tool ${skills.length === 2 ? "zweimal" : `${skills.length}-mal`} im selben Schritt auf: ${skills.map((s) => `mit skill "${s}"`).join(" und ")}` : `das Skill-Tool mit skill "${skills[0]}" auf`;
+function claudeInstructions(plan) {
+  if (plan.ask) {
+    const { question, follow, stay } = plan.ask;
+    const then = (o) => o.skills.length ? `rufe sofort ${callSkills(o.skills)}.` : "rufe kein Skill auf.";
+    return [
+      JEV_HEAD,
+      "Beginne noch nicht mit der Aufgabe. Stelle als Allererstes mit dem AskUserQuestion-Tool genau diese eine Frage (Texte w\xF6rtlich \xFCbernehmen, multiSelect: false):",
+      `- question: "${question}"`,
+      '- header: "Jev"',
+      `- Option 1: label "${follow.label}", description "${follow.description}"`,
+      `- Option 2: label "${stay.label}", description "${stay.description}"`,
+      `Antwort \u201E${follow.label}\u201C: ${then(follow)}`,
+      `Antwort \u201E${stay.label}\u201C: ${then(stay)}`,
+      "Freie Antwort: folge ihr sinngem\xE4\xDF. Danach bearbeite die Nachricht ganz normal und erw\xE4hne Jev nicht weiter."
+    ].join("\n");
+  }
+  if (!plan.skills.length) return null;
+  return [
+    JEV_HEAD,
+    `Rufe als Allererstes \u2013 vor jedem anderen Werkzeug und bevor du mit der Aufgabe beginnst \u2013 ${callSkills(plan.skills)}.`,
+    "Danach bearbeite die Nachricht ganz normal und erw\xE4hne diese Umstellung nicht."
+  ].join("\n");
+}
+function menuOf(turn) {
+  return { model: turn?.menu.model ?? settingsModel(), effort: turn?.menu.effort ?? (process.env.CLAUDE_EFFORT || null) };
+}
+async function claudeGuard(event, session, prompt, stateDir) {
+  const transcript = String(event.transcript_path ?? "");
+  const turn = transcript ? lastClaudeTurn(transcript) : null;
+  const menu = menuOf(turn);
+  const display = claudeProfile(event).display;
+  const settled = settleChat(readChatState(stateDir, session), turn, menu, display);
+  for (const e of settled.events) logDecision(stateDir, { app: "claude", session, ...e });
+  const trimmed = prompt.trim();
+  if (trimmed.startsWith("/")) {
+    writeChatState(stateDir, session, settled.state);
+    return;
+  }
+  const app = claudeProfile(event, { model: settled.state.jevModel ?? menu.model, effort: menu.effort });
+  let decision = null, failure2 = null;
+  if (trimmed.length >= SHORT_PROMPT) {
+    try {
+      const r = await runJev(app, { task: prompt });
+      if (r.ok) decision = decideClaude(r, app);
+      else failure2 = r.reason;
+    } catch (e) {
+      failure2 = e instanceof Error ? e.message : "Fehler";
+    }
+  }
+  const plan = planClaudeMessage({ menu, state: settled.state, decision, display });
+  writeChatState(stateDir, session, plan.state);
+  logDecision(stateDir, {
+    event: plan.event,
+    app: "claude",
+    session,
+    menu,
+    running: app.current().model,
+    target: decision?.model ?? null,
+    effort: decision?.stayEffort ?? null,
+    skills: plan.skills,
+    ask: plan.ask?.follow.skills ?? null,
+    reason: decision?.reason ?? failure2
+  });
+  const context = claudeInstructions(plan);
+  const text2 = [settled.warning, failure2 ? `keine Empfehlung (${failure2}) \u2013 ${plan.notice || "Nachricht wurde normal gesendet."}` : plan.notice].filter(Boolean).join(" \xB7 ");
+  const out = {};
+  if (text2) out.systemMessage = `Jev: ${text2}`;
+  if (context) out.hookSpecificOutput = { hookEventName: "UserPromptSubmit", additionalContext: context };
+  if (Object.keys(out).length) process.stdout.write(JSON.stringify(out) + "\n");
+}
+function statusText(event, appKind, session, stateDir, app) {
+  const on = guardEnabled(stateDir, session);
+  const lines = ["Jev-Status f\xFCr diesen Chat", `  Jev:      ${on ? "AN" : "AUS (einschalten: #jev an)"}`];
+  if (appKind === "codex") {
+    const cur = app.current();
+    lines.push(
+      `  Aktuell:  ${app.display(cur.model)}${cur.effort ? ` \xB7 ${effortLabel(cur.effort)}` : ""} (laut Verlauf)`,
+      "  Codex bietet keine Schnittstelle, \xFCber die Jev Modell oder Effort selbst umstellen kann \u2013 bei klarer Empfehlung wird die Nachricht einmal angehalten."
+    );
+    return lines.join("\n");
+  }
+  const turn = lastClaudeTurn(String(event.transcript_path ?? "")), st = readChatState(stateDir, session);
+  const show = (s) => showSetting(app.display, s);
+  lines.push(
+    `  Men\xFC:     ${turn ? `${show(turn.menu)} (laut letzter Antwort)` : "unbekannt \u2013 noch keine Antwort in diesem Chat"}`,
+    `  Modell:   ${st.jevModel ? `${app.display(st.jevModel)} \u2013 per Klick \xFCbernommen, Jev stellt es pro Nachricht ein` : "wie im Men\xFC"}`
+  );
+  if (turn) lines.push(`  Zuletzt:  lief auf ${show(turn.ran)}${turn.jevSkills.length ? ` \u2013 von Jev gesetzt (${turn.jevSkills.join(", ")})` : ""}`);
+  if (st.lastCheck) lines.push(`  Pr\xFCfung:  ${st.lastCheck.ok ? `\u2713 lief wie von Jev gesetzt (${st.lastCheck.ran})` : `\u26A0 Jev wollte ${st.lastCheck.expected}, lief auf ${st.lastCheck.ran}`}`);
+  if (st.declinedModel) lines.push(`  Abgelehnt: ${app.display(st.declinedModel)} (wird erst wieder angeboten, wenn Jev einmal \u201Epasst\u201C sagt)`);
+  return lines.join("\n");
+}
+var GUARD_ON = {
+  claude: [
+    "Jev ist f\xFCr DIESEN Chat AN \u2013 ab jetzt ohne #jev.",
+    "\u2022 Effort: Jev stellt ihn f\xFCr jede Nachricht selbst passend zu Aufgabe und Modell ein (gilt nur f\xFCr diese Nachricht, das Men\xFC bleibt).",
+    `\u2022 Modell: Ist ein anderes Modell klar besser (ab ${MIN_SWITCH_POINTS} Benchmark-Punkten) oder bei gleicher Qualit\xE4t mindestens ${Math.round(MIN_SAVING * 100)} % g\xFCnstiger, fragt Claude einmal nach \u2013 ein Klick auf \u201EJev folgen\u201C stellt um, danach bleibt der Chat darauf.`,
+    "\u2022 Kurze Nachrichten (\u201Eweiter\u201C, \u201Eok\u201C) laufen ohne neue Pr\xFCfung mit der letzten Einstellung.",
+    "Status: #jev status \xB7 Ausschalten: #jev aus"
+  ].join("\n"),
+  codex: [
+    "Jev-W\xE4chter ist f\xFCr DIESEN Chat AN \u2013 ab jetzt ohne #jev.",
+    `\u2022 Passt dein aktuelles Modell (Benchmark-Unterschied unter ${MIN_SWITCH_POINTS} Punkten), geht die Nachricht sofort durch \u2013 mit kurzer Info und Effort-Tipp.`,
+    `\u2022 Ist ein anderes Modell klar besser oder mindestens ${Math.round(MIN_SAVING * 100)} % g\xFCnstiger bei gleicher Qualit\xE4t, wird die Nachricht angehalten: Modell/Effort umstellen und dieselbe Nachricht nochmal senden (\u2191, Enter) \u2013 oder einfach nochmal senden, um Jev zu ignorieren.`,
+    "Codex bietet keine Schnittstelle, \xFCber die Jev Modell oder Effort selbst umstellen kann.",
+    "Ausschalten: #jev aus"
+  ].join("\n")
+};
 function logDecision(stateDir, entry) {
   try {
     mkdirSync(stateDir, { recursive: true });
@@ -21924,13 +22246,12 @@ async function handle(event, appKind, stateDir = stateDirectory()) {
   const app = appKind === "codex" ? codexProfile(event) : claudeProfile(event);
   if (command) {
     if (command.kind === "help") return block(HELP(app.name));
+    if (command.kind === "status") return block(statusText(event, appKind, session, stateDir, app));
     if (command.kind === "guard") {
-      if (!SESSION_ID.test(session)) return block("Jev-W\xE4chter: Dieser Chat hat keine erkennbare ID \u2013 nicht aktiviert.");
+      if (!SESSION_ID.test(session)) return block("Jev: Dieser Chat hat keine erkennbare ID \u2013 nicht aktiviert.");
       setGuard(stateDir, session, command.enabled);
-      return block(command.enabled ? `Jev-W\xE4chter ist f\xFCr DIESEN Chat AN \u2013 ab jetzt ohne #jev.
-\u2022 Passt dein aktuelles Modell (Benchmark-Unterschied unter ${MIN_SWITCH_POINTS} Punkten), geht die Nachricht sofort durch \u2013 mit kurzer Info und Effort-Tipp.
-\u2022 Ist ein anderes Modell klar besser oder mindestens ${Math.round(MIN_SAVING * 100)} % g\xFCnstiger bei gleicher Qualit\xE4t, wird die Nachricht angehalten: Modell/Effort umstellen und dieselbe Nachricht nochmal senden (\u2191, Enter) \u2013 oder einfach nochmal senden, um Jev zu ignorieren.
-Ausschalten: #jev aus` : `Jev-W\xE4chter ist f\xFCr diesen Chat AUS. Nachrichten gehen wieder direkt an ${app.name}.`);
+      if (!command.enabled) writeChatState(stateDir, session, null);
+      return block(command.enabled ? GUARD_ON[appKind] : `Jev ist f\xFCr diesen Chat AUS. Nachrichten gehen wieder unver\xE4ndert an ${app.name}.`);
     }
     try {
       const r = await runJev(app, command.kind === "question" ? { question: command.question } : { task: command.task });
@@ -21939,7 +22260,15 @@ Ausschalten: #jev aus` : `Jev-W\xE4chter ist f\xFCr diesen Chat AUS. Nachrichten
       return block(`Jev konnte den Chat nicht lesen (${e instanceof Error ? e.message : "Fehler"}).`);
     }
   }
-  if (!guardEnabled(stateDir, session) || prompt.trim().startsWith("/") || prompt.trim().length < 20) return;
+  if (!guardEnabled(stateDir, session)) return;
+  if (appKind === "claude") {
+    try {
+      await claudeGuard(event, session, prompt, stateDir);
+    } catch {
+    }
+    return;
+  }
+  if (prompt.trim().startsWith("/") || prompt.trim().length < SHORT_PROMPT) return;
   const hash2 = createHash("sha256").update(session + "\0" + prompt.trim()).digest("hex");
   const pendingFile = join3(stateDir, "guard-pending.json");
   const pending = readJson(pendingFile);
@@ -21986,19 +22315,33 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
 });
 export {
   HELP,
+  SKILL_EFFORTS,
+  SKILL_MODELS,
+  claudeInstructions,
   claudeProfile,
   codexProfile,
   currentModel,
+  decideClaude,
   effectiveModel,
+  effortFor,
+  effortSkill,
   focusFile,
   formatResult,
   guardEnabled,
   handle,
+  lastClaudeTurn,
   logDecision,
+  modelSkill,
   parseJevCommand,
+  planClaudeMessage,
+  readChatState,
   readFocus,
   recommend,
+  sameKey,
   sameModel,
   setGuard,
+  settleChat,
+  skillsFor,
+  writeChatState,
   writeFocus
 };

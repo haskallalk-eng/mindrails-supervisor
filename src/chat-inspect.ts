@@ -14,7 +14,7 @@ export type ChatSource = { kind: 'claude' | 'codex'; id: string; title: string; 
 export type ModelOption = { id: string; label: string; description: string };
 // Jev decides the capability TIER, not an individual model: versions within a
 // tier (e.g. Opus 4.6 vs 4.7) rarely matter enough to interrupt the user.
-// Advisory only: the user switches the model in the Claude app.
+// In Claude, Jev's plugin skills switch model/effort per message (src/jev-hook.ts).
 // A capability tier of one app. `efforts` are the exact effort ids the tier's
 // default model offers in that app; an empty list means the app has no effort
 // setting for it (Haiku 4.5 in Claude).
@@ -112,7 +112,7 @@ function readSlice(path: string, start: number, length: number): string {
 }
 const stripTags = (text: string) => text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').replace(/<\/?pasted_content[^>]*>/g, '').trim();
 
-function userText(content: unknown): string {
+export function userText(content: unknown): string {
   if (typeof content === 'string') return stripTags(content);
   if (!Array.isArray(content)) return '';
   return stripTags(content.filter((b: any) => b?.type === 'text').map((b: any) => String(b.text)).join('\n'));
