@@ -8,7 +8,7 @@
     {
       "name": "jev",
       "source": "./plugins/jev-claude",
-      "description": "Checks each new task against benchmarks: do model and effort fit? One line, never holds a message."
+      "description": "Checks each new task against benchmarks: check mark, card plus on-screen figure, or a one-time hold, depending on how far model and effort are off."
     }
   ]
 }

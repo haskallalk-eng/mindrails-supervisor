@@ -2,7 +2,17 @@
 
 ## Jev – die richtige KI-Modellwahl vor jeder Aufgabe (Claude Code & Codex)
 
-Jev prüft jede Nachricht zuerst selbst: Ist das eine neue Aufgabe? Antworten wie „ok“ oder „mach weiter“ lässt er in Ruhe. Bei einer neuen Aufgabe ordnet er sie ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und gewichteter Erfahrungswerte, den Effort pro Modell (nur Stufen, die das Modell in der App wirklich hat). Das Ergebnis steht als **eine Zeile** im Chat. Ein anderes Modell schlägt Jev nur vor, wenn es **klar** besser ist (≥ 4 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 25 % günstiger**. **Jev hält nie eine Nachricht an.** Umstellen musst du selbst im Modellmenü: Weder Claude noch Codex lassen ein Plugin Modell oder Effort ändern (in der Claude-Desktop-App live getestet, Details unten).
+Jev prüft jede Nachricht zuerst selbst: Ist das eine neue Aufgabe? Antworten wie „ok“ oder „mach weiter“ lässt er in Ruhe. Bei einer neuen Aufgabe ordnet er sie ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und gewichteter Erfahrungswerte. Den Effort wählt Jev pro Modell, bei schweren Aufgaben eine Stufe höher, und immer nur Stufen, die das Modell in der App wirklich hat. Ein anderes Modell schlägt Jev nur vor, wenn es **klar** besser ist (≥ 4 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 25 % günstiger**.
+
+Was du siehst, hängt davon ab, wie weit deine Einstellung danebenliegt:
+
+| Abstand | Was passiert |
+|---|---|
+| passt | ein `✓` im Chat |
+| **1 Stufe** daneben (Effort) oder 1 Leistungsklasse (Modell) | eine Karte im Chat, z. B. „⚙ JEV · EFFORT ÄNDERN – 1 STUFE ZU HOCH“ mit Skala `○ Niedrig ◆ Mittel ● Hoch …`, und die **Jev-Figur** unten rechts am Fenster. Die Nachricht läuft weiter. |
+| **2 oder mehr** Stufen daneben | Die Nachricht wird **einmal angehalten**, mit derselben Karte und einer roten Jev-Figur. Umstellen und erneut senden, oder einfach erneut senden, dann läuft sie so. |
+
+Umstellen musst du selbst im Menü: Weder Claude noch Codex lassen ein Plugin Modell oder Effort ändern (in der Claude-Desktop-App live getestet, Details unten). Die Jev-Figur ist ein kleines Fenster unter Windows, das unten rechts am Claude- bzw. Codex-Fenster erscheint. Es liegt im Vordergrund, nimmt nie den Fokus und verschwindet nach ein paar Sekunden oder per Klick.
 
 **Installieren (Claude Code):**
 
@@ -30,9 +40,10 @@ Voraussetzungen: Node.js ≥ 20 im PATH und ein Vercel-AI-Gateway-Schlüssel als
 | `#jev status` | Aktuelle Einstellung und Jevs letzte Einschätzung |
 | `#jev` | Chat analysieren (Fortschritt, Hindernis, nächster Schritt) |
 | `#jev? <Frage>` | Ja/Nein-Frage zum Chat, Antwort in % |
+| `#jev figur an` / `aus` / `test` | Jev-Figur ein- oder ausschalten, oder einmal zur Probe zeigen |
 | `#jev hilfe` | Befehle anzeigen |
 
-Nur die reinen Befehle ohne Text (`#jev an`, `#jev status`, `#jev`, `#jev?`, `#jev hilfe`) gehen nicht an das Modell, alles mit Text wird gesendet. Jede geprüfte Nachricht kostet einen Jev-Aufruf (etwa 1 Sekunde).
+Nur die reinen Befehle ohne Text (`#jev an`, `#jev status`, `#jev figur …`, `#jev`, `#jev?`, `#jev hilfe`) gehen nicht an das Modell, alles mit Text wird gesendet. Jede geprüfte Nachricht kostet einen Jev-Aufruf (etwa 1 Sekunde). In der Claude-Desktop-App liest Jev die aktuelle Menü-Einstellung direkt aus der Chat-Datei der App, nur lesend. So zählt ein Umstellen sofort, nicht erst nach der nächsten Antwort.
 
 **Warum Jev nicht selbst umstellt:** Claude Code liest Modell und Effort zwar aus Skills (`model:`/`effort:` im Skill-Kopf). In der Desktop-App (2.1.281) gingen im Live-Test aber alle Anfragen weiter mit Modell und Effort aus dem Menü raus. Die App setzt ihre Menü-Einstellung bei jeder Anfrage durch und verweigert einer Sitzung ausdrücklich, ihre eigenen Nachrichten umzupreisen. Codex bietet in Hooks und Skills gar keine solche Schnittstelle. Details, Benchmark-Quellen und Grenzen: [docs/model-routing.md](docs/model-routing.md).
 

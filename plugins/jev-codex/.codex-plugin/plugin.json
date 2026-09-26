@@ -1,14 +1,14 @@
 {
   "name": "jev",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Jev picks the right GPT model and reasoning effort for every Codex task, from published benchmarks.",
   "author": {
     "name": "Mindrails"
   },
   "interface": {
     "displayName": "Jev Modellwahl",
-    "shortDescription": "Checks each new task: do model and effort fit?",
-    "longDescription": "Type `#jev an` once in a conversation. Jev first decides itself whether a message is a new task; replies like \"ok\" or \"weiter\" are left alone. For a new task it classifies the kind and difficulty, a fixed policy picks model and effort from published benchmarks and weighted user evidence, and one line shows whether the current setting fits. Messages are never held; switch in the model menu. `#jev`, `#jev <Text>`, `#jev? <Frage>`, `#jev status`, `#jev aus`. Requires AI_GATEWAY_API_KEY (Vercel AI Gateway); chat excerpts are sent to Jev and may incur charges.",
+    "shortDescription": "Checks each new task: do model and Denkaufwand fit?",
+    "longDescription": "Type `#jev an` once in a conversation. Jev first decides itself whether a message is a new task; replies like \"ok\" are left alone. For a new task a fixed policy picks model and reasoning effort from published benchmarks and weighted user evidence. Fits: a check mark. One step off: a card with the effort scale and a small Jev figure at the bottom right of the window (Windows). Two or more steps off: the message is held once; send it again to proceed. Switch in the model menu; Codex offers plugins no way to change it. `#jev status`, `#jev figur aus`, `#jev aus`. Requires AI_GATEWAY_API_KEY (Vercel AI Gateway); chat excerpts are sent to Jev and may incur charges.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": []

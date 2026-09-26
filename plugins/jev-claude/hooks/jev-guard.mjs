@@ -6,10 +6,12 @@ var __export = (target, all) => {
 };
 
 // src/jev-hook.ts
-import { mkdirSync, writeFileSync, renameSync, readFileSync as readFileSync3, openSync as openSync3, readSync as readSync3, closeSync as closeSync3, statSync as statSync3, realpathSync, appendFileSync } from "node:fs";
-import { join as join3 } from "node:path";
+import { mkdirSync, writeFileSync, renameSync, readFileSync as readFileSync3, openSync as openSync3, readSync as readSync3, closeSync as closeSync3, statSync as statSync3, realpathSync, appendFileSync, readdirSync as readdirSync3, existsSync as existsSync3, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { dirname, join as join3 } from "node:path";
 import { homedir as homedir3 } from "node:os";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // src/chat-inspect.ts
 import { readdirSync, statSync, openSync, readSync, closeSync, readFileSync, existsSync } from "node:fs";
@@ -21771,6 +21773,11 @@ function parseJevCommand(prompt) {
   }
   if (/^(hilfe|help|\?)$/i.test(rest)) return { kind: "help" };
   if (/^status$/i.test(rest)) return { kind: "status" };
+  const figure = /^figur\s+(an|ein|on|aus|off|test)$/i.exec(rest);
+  if (figure) {
+    const w = figure[1].toLowerCase();
+    return { kind: "badge", action: w === "test" ? "test" : /^(aus|off)$/.test(w) ? "aus" : "an" };
+  }
   return { kind: "once", task: rest };
 }
 function currentModel(transcriptPath) {
@@ -21809,6 +21816,29 @@ function claudeSetting(transcriptPath, maxBytes = 4 * 1024 * 1024) {
   }
   return { model: null, effort: null };
 }
+var claudeDesktopSessions = () => process.env.JEV_CLAUDE_DESKTOP_SESSIONS ?? join3(process.env.APPDATA ?? join3(homedir3(), "AppData", "Roaming"), "Claude", "claude-code-sessions");
+function claudeMenu(cliSessionId, root = claudeDesktopSessions()) {
+  if (!SESSION_ID.test(cliSessionId)) return null;
+  try {
+    for (const account of readdirSync3(root, { withFileTypes: true })) {
+      if (!account.isDirectory()) continue;
+      for (const org of readdirSync3(join3(root, account.name), { withFileTypes: true })) {
+        if (!org.isDirectory()) continue;
+        const dir = join3(root, account.name, org.name);
+        for (const file2 of readdirSync3(dir)) {
+          if (!/^local_[\w-]+\.json$/.test(file2)) continue;
+          const text2 = readFileSync3(join3(dir, file2), "utf8");
+          if (!text2.includes(`"${cliSessionId}"`)) continue;
+          const o = JSON.parse(text2);
+          if (o.cliSessionId !== cliSessionId) continue;
+          return { model: typeof o.model === "string" ? o.model : null, effort: typeof o.effort === "string" ? o.effort : null };
+        }
+      }
+    }
+  } catch {
+  }
+  return null;
+}
 var CLAUDE_EFFORT_IDS = ["low", "medium", "high", "xhigh", "max"];
 function claudeProfile(event) {
   const path = String(event.transcript_path ?? "");
@@ -21819,9 +21849,11 @@ function claudeProfile(event) {
     tiers: CLAUDE_TIERS,
     candidates: Object.keys(MODEL_FACTS).filter((k) => MODEL_FACTS[k].app === "claude"),
     readTurns: () => readClaudeSession(path),
+    // The desktop app's live menu first (it changes before any reply shows it), else the latest reply, else settings.
     current: () => current ??= (() => {
+      const menu = claudeMenu(String(event.session_id ?? ""));
       const s = path ? claudeSetting(path) : { model: null, effort: null };
-      return { model: s.model ?? settingsModel(), effort: s.effort };
+      return { model: menu?.model ?? s.model ?? settingsModel(), effort: menu?.model ? menu.effort : s.effort };
     })(),
     // Haiku 4.5 has no effort setting; the Claude 5 family offers low…max.
     efforts: (model) => /haiku/i.test(model) ? [] : CLAUDE_EFFORT_IDS,
@@ -21852,7 +21884,12 @@ function effortFor(model, r, app) {
   const kind = r.taskKind?.choice ?? "coding";
   const fromSpectrum = model ? spectrumEffort(model, kind) : null;
   const useSpectrum = !!fromSpectrum && offered.includes(fromSpectrum.effort);
-  const effort = useSpectrum ? fromSpectrum.effort : pickEffort(r.effort, offered);
+  let effort = useSpectrum ? fromSpectrum.effort : pickEffort(r.effort, offered);
+  if (useSpectrum && r.difficulty?.choice === "hard") {
+    const ladder = [...offered].sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b));
+    const next = ladder[ladder.indexOf(effort) + 1], avoid = fromSpectrum.avoidFrom;
+    if (next && (!avoid || EFFORT_ORDER.indexOf(next) < EFFORT_ORDER.indexOf(avoid))) effort = next;
+  }
   return {
     effort,
     source: effort ? useSpectrum ? "erfahrung" : "jev" : null,
@@ -21917,31 +21954,92 @@ function shortWhy(rec, app, target, running) {
 }
 var effortName = (e) => e ? EFFORTS.find((x) => x.id === e)?.label ?? e : null;
 var showSetting = (display, s) => [display(s.model), /haiku/i.test(s.model ?? "") ? null : effortName(s.effort)].filter(Boolean).join(" \xB7 ");
-function recommendationLine(r, app, rec = recommend(r, app)) {
-  const cur = app.current(), show = (s) => showSetting(app.display, s);
-  const kind = r.taskKind && r.difficulty ? ` (${KIND_LABEL[r.taskKind.choice] ?? r.taskKind.choice}, ${DIFF_LABEL[r.difficulty.choice] ?? r.difficulty.choice})` : "";
-  const target = rec.interrupt && rec.model && !sameKey(rec.model, cur.model) ? rec.model : cur.model;
+var EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+var STOP_STEPS = 2;
+function assess(r, app, rec = recommend(r, app)) {
+  const cur = app.current();
+  const task = r.taskKind && r.difficulty ? `${KIND_LABEL[r.taskKind.choice] ?? r.taskKind.choice}, ${DIFF_LABEL[r.difficulty.choice] ?? r.difficulty.choice}` : "";
+  const switchModel = Boolean(rec.interrupt && rec.model && cur.model && !sameKey(rec.model, cur.model));
+  const target = switchModel ? rec.model : cur.model ?? rec.model;
   const effort = effortFor(target, r, app).effort;
-  if (!cur.model) return `Jev${kind}: empfohlen ${show({ model: rec.model, effort: rec.effort })} \u2013 die aktuelle Einstellung ist noch unbekannt.`;
-  if (!sameKey(target, cur.model)) return `Jev${kind}: ${show({ model: target, effort })} w\xE4re besser als ${show(cur)} \u2013 ${shortWhy(rec, app, target, cur.model)}. Umstellen im Modellmen\xFC.`;
-  if (effort && cur.effort && effort !== cur.effort) return `Jev${kind}: ${app.display(cur.model)} passt, Effort ${effortName(effort)} empfohlen (eingestellt: ${effortName(cur.effort)}).`;
-  return `Jev${kind}: ${show(cur)} passt.`;
+  const rank = (m) => tierOf(m, app.tiers)?.rank ?? null;
+  const [rt, rc] = [rank(target), rank(cur.model)];
+  const modelSteps = switchModel ? Math.max(1, rt !== null && rc !== null ? Math.abs(rt - rc) : 1) : 0;
+  const ladder = cur.model ? [...app.efforts(cur.model)].sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b)) : [];
+  const effortSteps = !switchModel && effort && cur.effort && ladder.includes(effort) && ladder.includes(cur.effort) ? Math.abs(ladder.indexOf(effort) - ladder.indexOf(cur.effort)) : 0;
+  const steps = Math.max(modelSteps, effortSteps);
+  return {
+    level: steps >= STOP_STEPS ? "stop" : steps >= 1 ? "note" : "fits",
+    kind: switchModel ? "model" : effortSteps ? "effort" : null,
+    task,
+    cur,
+    target,
+    effort,
+    modelSteps,
+    effortSteps,
+    ladder,
+    why: switchModel ? shortWhy(rec, app, target, cur.model) : ""
+  };
 }
+function jevCard(a, app) {
+  const d = app.display, codex = app.kind === "codex", stop = a.level === "stop";
+  const effortWord = codex ? "Denkaufwand" : "Effort", task = a.task ? ` (${a.task})` : "";
+  const menu = codex ? "Im Modellmen\xFC" : "Unten rechts";
+  const onlyTip = "Nur eine Empfehlung \u2013 noch nicht umgestellt. Die aktuelle Nachricht l\xE4uft weiter.";
+  const asIs = "Ohne Umstellen erneut senden = sie l\xE4uft so, wie es gerade eingestellt ist.";
+  const badgeBody = stop ? "Nachricht angehalten \u2013 umstellen, dann erneut senden" : `${menu} umstellen \xB7 die Nachricht l\xE4uft weiter`;
+  if (!a.cur.model) return { text: `Jev${task}: empfohlen ${showSetting(d, { model: a.target, effort: a.effort })} \u2013 die aktuelle Einstellung ist noch unbekannt.`, badge: null };
+  if (a.kind === "model") {
+    const [from, to] = [tierOf(a.cur.model, app.tiers)?.label, tierOf(a.target, app.tiers)?.label];
+    const set2 = `das Modell auf \u201E${d(a.target)}\u201C${a.effort ? ` und den ${effortWord} auf \u201E${effortName(a.effort)}\u201C` : ""} stellen`;
+    return {
+      text: [
+        stop ? `\u26D4 JEV \xB7 ANGEHALTEN \u2013 MODELL ${a.modelSteps} STUFEN DANEBEN` : "\u2699 JEV \xB7 MODELL: BESSERE WAHL",
+        `${showSetting(d, a.cur)} \u2192 ${showSetting(d, { model: a.target, effort: a.effort })}${from && to && from !== to ? `   (${from} \u2192 ${to})` : ""}`,
+        `Grund: ${a.why}.`,
+        ...stop ? [`So geht's weiter: ${menu.toLowerCase()} ${set2} und die Nachricht erneut senden.`, asIs] : [`${menu} ${set2}. ${onlyTip}`]
+      ].join("\n"),
+      badge: { title: `Modell \u2192 ${d(a.target)}`, body: badgeBody }
+    };
+  }
+  if (a.kind === "effort") {
+    const up = a.ladder.indexOf(a.effort) > a.ladder.indexOf(a.cur.effort);
+    const steps = `${a.effortSteps} ${a.effortSteps === 1 ? "STUFE" : "STUFEN"} ${up ? "ZU NIEDRIG" : "ZU HOCH"}`;
+    const scale = a.ladder.map((e) => `${e === a.effort ? "\u25C6" : e === a.cur.effort ? "\u25CF" : "\u25CB"} ${effortName(e)}`).join("   ");
+    const how = `${menu} den ${effortWord} auf \u201E${effortName(a.effort)}\u201C stellen`;
+    return {
+      text: [
+        stop ? `\u26D4 JEV \xB7 ANGEHALTEN \u2013 ${effortWord.toUpperCase()} ${steps}` : `\u2699 JEV \xB7 ${effortWord.toUpperCase()} \xC4NDERN \u2013 ${steps}`,
+        `${effortName(a.cur.effort)} \u2192 ${effortName(a.effort)} (${a.effort})`,
+        `${scale}      \u25C6 empfohlen  \u25CF eingestellt`,
+        `${d(a.cur.model)} passt${task}.`,
+        ...stop ? [`So geht's weiter: ${how.charAt(0).toLowerCase()}${how.slice(1)} und die Nachricht erneut senden.`, asIs] : [`${how}. ${onlyTip}`]
+      ].join("\n"),
+      badge: { title: `${effortWord} \u2192 ${effortName(a.effort)}`, body: badgeBody }
+    };
+  }
+  const tip = !a.cur.effort && a.effort && a.ladder.length ? ` Empfohlener ${effortWord}: ${effortName(a.effort)}.` : "";
+  return { text: `\u2713 Jev${task}: ${showSetting(d, a.cur)} passt.${tip}`, badge: null };
+}
+var recommendationLine = (r, app, rec = recommend(r, app)) => jevCard(assess(r, app, rec), app).text;
 var HELP = (app = "Claude") => [
   `Jev-Befehle (Befehle ohne Text werden nicht an ${app} gesendet):`,
-  "  #jev an [Text]   \u2013 Jev f\xFCr DIESEN Chat einschalten; ein Text dahinter wird ganz normal gesendet",
-  "  #jev aus [Text]  \u2013 Jev ausschalten",
-  "  #jev <Text>      \u2013 Text senden, Jev schaut einmal drauf",
-  "  #jev             \u2013 diesen Chat analysieren",
-  "  #jev? <Frage>    \u2013 Ja/Nein-Frage zum Chat an Jev, Antwort in %",
-  "  #jev status      \u2013 aktuelle Einstellung und Jevs letzte Einsch\xE4tzung"
+  "  #jev an [Text]      \u2013 Jev f\xFCr DIESEN Chat einschalten; ein Text dahinter wird ganz normal gesendet",
+  "  #jev aus [Text]     \u2013 Jev ausschalten",
+  "  #jev <Text>         \u2013 Text senden, Jev schaut einmal drauf",
+  "  #jev                \u2013 diesen Chat analysieren",
+  "  #jev? <Frage>       \u2013 Ja/Nein-Frage zum Chat an Jev, Antwort in %",
+  "  #jev status         \u2013 aktuelle Einstellung und Jevs letzte Einsch\xE4tzung",
+  "  #jev figur an|aus   \u2013 die Jev-Figur unten rechts am Fenster ein- oder ausschalten (#jev figur test zeigt sie)"
 ].join("\n");
 var GUARD_ON = (app) => [
   "Jev ist f\xFCr DIESEN Chat AN \u2013 ab jetzt ohne #jev.",
   "\u2022 Jev pr\xFCft jede Nachricht zuerst selbst: Ist das eine neue Aufgabe? Wenn nicht (Antwort, \u201Eweiter\u201C, R\xFCckfrage), passiert nichts.",
-  "\u2022 Bei einer neuen Aufgabe schreibt Jev eine Zeile dazu, ob Modell und Effort passen. Die Nachricht l\xE4uft dabei sofort weiter \u2013 Jev h\xE4lt nie etwas an.",
-  `\u2022 Umstellen musst du selbst im Modellmen\xFC: ${app} l\xE4sst Modell und Effort nicht von Plugins \xE4ndern.`,
-  "Status: #jev status \xB7 Ausschalten: #jev aus"
+  "\u2022 Passen Modell und Effort, steht nur ein \u2713 im Chat.",
+  "\u2022 1 Stufe daneben: ein Hinweis im Chat und die Jev-Figur unten rechts \u2013 die Nachricht l\xE4uft weiter.",
+  `\u2022 ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wird angehalten. Umstellen und erneut senden \u2013 oder einfach erneut senden, dann l\xE4uft sie so.`,
+  `\u2022 Umstellen musst du selbst: ${app} l\xE4sst Modell und Effort nicht von Plugins \xE4ndern.`,
+  "Status: #jev status \xB7 Figur aus: #jev figur aus \xB7 Ausschalten: #jev aus"
 ].join("\n");
 function formatResult(r, description, app) {
   if (!r.ok) return `Jev konnte nicht antworten (${r.reason}). Keine Werte erfunden, kein Neuversuch.`;
@@ -21992,14 +22090,63 @@ async function runJev(app, opts) {
     source: app.kind === "claude" ? "Claude Code session" : "Codex conversation"
   });
 }
+var PASS_WINDOW_MS = 15 * 6e4;
+var passFile = (stateDir, session) => join3(stateDir, "held", `${session.replace(/[^0-9a-z-]/gi, "")}.json`);
+function markHeld(stateDir, session, at = Date.now()) {
+  writeJson(passFile(stateDir, session), { at });
+}
+function takePass(stateDir, session, now = Date.now()) {
+  const held = readJson(passFile(stateDir, session));
+  if (!held) return false;
+  try {
+    rmSync(passFile(stateDir, session));
+  } catch {
+  }
+  return Number.isFinite(held.at) && now - held.at < PASS_WINDOW_MS;
+}
+var settingsFile = (stateDir) => join3(stateDir, "settings.json");
+var badgeEnabled = (stateDir) => readJson(settingsFile(stateDir))?.badge !== false;
+function setBadge(stateDir, enabled) {
+  writeJson(settingsFile(stateDir), { ...readJson(settingsFile(stateDir)) ?? {}, badge: enabled });
+}
+function showBadge(stateDir, appKind, level, badge) {
+  if (process.platform !== "win32" || !badgeEnabled(stateDir)) return false;
+  let script;
+  try {
+    script = join3(dirname(fileURLToPath(import.meta.url)), "jev-badge.ps1");
+  } catch {
+    return false;
+  }
+  if (!existsSync3(script)) return false;
+  const spec = join3(stateDir, "badge.json");
+  try {
+    writeJson(spec, { id: randomUUID(), app: appKind, level, title: badge.title, body: badge.body, seconds: level === "stop" ? 45 : 15 });
+  } catch {
+    return false;
+  }
+  try {
+    spawn(
+      "cmd.exe",
+      ["/d", "/s", "/c", "start", '""', "/b", "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script, "-Spec", spec],
+      { detached: true, stdio: "ignore", windowsHide: true }
+    ).unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function checkMessage(event, appKind, app, session, prompt, stateDir, opts) {
-  const emit = (line2) => {
+  const emit = (line) => {
     const out = {};
-    const text2 = [opts.lead, line2].filter(Boolean).join(" ");
+    const text2 = [opts.lead, line].filter(Boolean).join(line?.includes("\n") ? "\n" : " ");
     if (text2) out.systemMessage = text2;
     if (opts.command) out.hookSpecificOutput = { hookEventName: "UserPromptSubmit", additionalContext: `Hinweis: Das vorangestellte \u201E${opts.command}\u201C ist ein Befehl an das Jev-Plugin und geh\xF6rt nicht zur Nachricht.` };
     if (Object.keys(out).length) process.stdout.write(JSON.stringify(out) + "\n");
   };
+  if (takePass(stateDir, session)) {
+    logDecision(stateDir, { event: "passed-after-hold", app: appKind, session, current: app.current() });
+    return emit("Jev: Die angehaltene Nachricht geht jetzt durch.");
+  }
   let r;
   try {
     r = await runJev(app, { task: prompt, gate: opts.gate });
@@ -22014,30 +22161,40 @@ async function checkMessage(event, appKind, app, session, prompt, stateDir, opts
     logDecision(stateDir, { event: "no-new-task", app: appKind, session, newTask: r.newTask.yes });
     return emit(null);
   }
-  const rec = recommend(r, app), line = recommendationLine(r, app, rec);
+  const rec = recommend(r, app), a = assess(r, app, rec), card = jevCard(a, app);
   logDecision(stateDir, {
     event: "checked",
     app: appKind,
     session,
     newTask: r.newTask?.yes ?? null,
-    current: app.current(),
-    recommended: rec.model,
-    switchSuggested: rec.interrupt,
+    current: a.cur,
+    recommended: a.target,
+    effort: a.effort,
+    level: a.level,
+    modelSteps: a.modelSteps,
+    effortSteps: a.effortSteps,
     taskKind: r.taskKind?.choice ?? null,
     difficulty: r.difficulty?.choice ?? null,
     reason: rec.policy && "reason" in rec.policy ? rec.policy.reason : null,
-    line
+    line: card.text.split("\n")[0]
   });
-  emit(line);
+  if (card.badge && a.level !== "fits") showBadge(stateDir, appKind, a.level, card.badge);
+  if (a.level === "stop") {
+    markHeld(stateDir, session);
+    return block([opts.lead, card.text].filter(Boolean).join("\n"));
+  }
+  emit(card.text);
 }
 function statusText(appKind, session, stateDir, app) {
   const on = guardEnabled(stateDir, session), last = lastDecision(stateDir, session);
+  const source = appKind === "codex" ? "laut Verlauf" : claudeMenu(session) ? "laut Men\xFC der App" : "laut letzter Antwort";
   return [
     "Jev-Status f\xFCr diesen Chat",
-    `  Jev:          ${on ? "AN \u2013 pr\xFCft jede Nachricht selbst, h\xE4lt nie etwas an" : "AUS (einschalten: #jev an)"}`,
-    `  Eingestellt:  ${showSetting(app.display, app.current())} (${appKind === "claude" ? "laut letzter Antwort" : "laut Verlauf"})`,
+    `  Jev:          ${on ? `AN \u2013 pr\xFCft jede Nachricht selbst; ab ${STOP_STEPS} Stufen daneben wird einmal angehalten` : "AUS (einschalten: #jev an)"}`,
+    `  Eingestellt:  ${showSetting(app.display, app.current())} (${source})`,
     last ? `  Zuletzt:      ${last.event === "no-new-task" ? "keine neue Aufgabe \u2013 nichts zu tun" : last.event === "failed" ? `keine Einsch\xE4tzung (${last.reason})` : last.line}` : null,
-    `  Umstellen geht nur im Modellmen\xFC: ${app.name} l\xE4sst Modell und Effort nicht von Plugins \xE4ndern.`
+    `  Jev-Figur:    ${badgeEnabled(stateDir) ? "an" : "aus"}${process.platform === "win32" ? "" : " (nur unter Windows)"}`,
+    `  Umstellen geht nur im Men\xFC: ${app.name} l\xE4sst Modell und Effort nicht von Plugins \xE4ndern.`
   ].filter(Boolean).join("\n");
 }
 async function handle(event, appKind, stateDir = stateDirectory()) {
@@ -22055,6 +22212,14 @@ async function handle(event, appKind, stateDir = stateDirectory()) {
   if (command) {
     if (command.kind === "help") return block(HELP(app.name));
     if (command.kind === "status") return block(statusText(appKind, session, stateDir, app));
+    if (command.kind === "badge") {
+      if (command.action !== "test") {
+        setBadge(stateDir, command.action === "an");
+        return block(`Jev-Figur ist ${command.action === "an" ? "AN \u2013 sie erscheint unten rechts am Fenster, wenn Modell oder Effort nicht passen" : "AUS \u2013 Jev meldet sich nur noch im Chat"}.`);
+      }
+      const shown = showBadge(stateDir, appKind, "note", { title: `${appKind === "codex" ? "Denkaufwand" : "Effort"} \u2192 Mittel`, body: "So sieht die Jev-Figur aus \xB7 ein Klick schlie\xDFt sie" });
+      return block(shown ? "Jev-Figur: Test l\xE4uft \u2013 sie erscheint gleich unten rechts am Fenster und verschwindet nach 15 Sekunden." : "Jev-Figur ist aus (#jev figur an) oder hier nicht verf\xFCgbar (nur Windows).");
+    }
     if (command.kind === "guard") {
       if (!SESSION_ID.test(session)) return command.rest ? void 0 : block("Jev: Dieser Chat hat keine erkennbare ID \u2013 nicht aktiviert.");
       setGuard(stateDir, session, command.enabled);
@@ -22101,7 +22266,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
 export {
   HELP,
   NEW_TASK_MIN,
+  PASS_WINDOW_MS,
+  STOP_STEPS,
+  assess,
+  badgeEnabled,
   checkMessage,
+  claudeDesktopSessions,
+  claudeMenu,
   claudeProfile,
   claudeSetting,
   codexProfile,
@@ -22112,13 +22283,18 @@ export {
   formatResult,
   guardEnabled,
   handle,
+  jevCard,
   logDecision,
+  markHeld,
   parseJevCommand,
   readFocus,
   recommend,
   recommendationLine,
   sameKey,
   sameModel,
+  setBadge,
   setGuard,
+  showBadge,
+  takePass,
   writeFocus
 };

@@ -55,17 +55,33 @@ Computer use is not used for this: it would need screen access every time, is sl
 
 ### Guard mode (Claude Code and Codex)
 
-`#jev an` turns Jev on **for that chat only** (stored per session id, stays on until `#jev aus`). Every prompt except slash commands then goes to Jev. **No prompt is ever held back.**
+`#jev an` turns Jev on **for that chat only** (stored per session id, stays on until `#jev aus`). Every prompt except slash commands then goes to Jev.
 
 1. **Jev decides whether a look is needed.** The same Jev request carries a yes/no question, `new_task`: does this message start a new task, or clearly change the kind or difficulty of the work? Replies, confirmations, answers, small corrections and "continue" are not new tasks. Below 50 % (`NEW_TASK_MIN`) nothing happens and nothing is shown. There is no length rule in our code; Jev makes this call.
-2. **New task.** The benchmark policy below picks the model and the per-model effort. The chat shows one line with the result:
-   - the current setting fits;
-   - the model fits, but a different effort is recommended;
-   - another model would be clearly better, with the reason.
-3. **Current setting.** For Claude, the model and effort come from the latest reply in the transcript: `message.model`, and `perTurnEffort` or else `effort`. For Codex, they come from the rollout.
-4. **Prefix commands.** `#jev an <text>`, `#jev aus <text>` and `#jev <text>` send the text; `additionalContext` tells the model to ignore the command prefix. Only bare commands are held, because they have nothing to send: `#jev an`, `#jev aus`, `#jev`, `#jev? <question>`, `#jev status` and `#jev hilfe`.
+2. **New task: distance in steps.** The benchmark policy below picks the model and the per-model effort. The effort is the level the weighted evidence names for that model; a hard task gets one level more, never into the range rated "too much" (`avoidFrom`). `assess()` counts how far the current setting is off:
+   - effort: levels on the model's own ladder (Claude low…max, Codex per model, e.g. including `ultra`);
+   - model: capability tiers between current and recommended (only when the policy recommends a switch; a switch within one tier counts as 1).
+3. **What the user sees** (user rule, `STOP_STEPS = 2`):
 
-Every check is logged to `guard-log.jsonl` as `checked`, `no-new-task` or `failed`, without prompt text. `#jev status` shows the latest entry.
+   | Distance | Result |
+   |---|---|
+   | 0 | a `✓` line |
+   | 1 | a card as `systemMessage` plus the Jev figure; the message runs |
+   | ≥ 2 | the message is held once (`decision: block`) with the card plus a red Jev figure |
+
+   The card shows `⚙ JEV · EFFORT ÄNDERN – 1 STUFE ZU HOCH` (Codex: `DENKAUFWAND`), `Hoch → Mittel (medium)` and a scale such as `○ Niedrig ◆ Mittel ● Hoch ○ Extra hoch ○ Max` (◆ recommended, ● set). For a model switch it shows `Fable 5.1 · Max → Opus 5.5 · Mittel (Spitze → Stark)` with the benchmark reason.
+4. **Held messages pass on the next send.** After a hold, the next message in that chat within 15 minutes (`PASS_WINDOW_MS`) passes without a new Jev call, whether the user switched the setting or wants it as is. The desktop app's "edit prompt" puts the text back; Enter sends it.
+5. **Current setting.** For the Claude desktop app, the model and effort come from the app's own chat file: `%APPDATA%\Claude\claude-code-sessions\…\local_*.json`, matched by `cliSessionId` and read-only (about 25 ms). A menu change therefore counts at once. Without the desktop app, they come from the latest reply in the transcript (`message.model`, and `perTurnEffort` or else `effort`). For Codex they come from the rollout: the hook input has `model`, but no effort.
+6. **Jev figure (Windows).** `src/jev-badge.ps1`, copied next to the hook bundle, shows a small WPF window near the bottom right of the Claude window (process `claude`) or Codex window (process `ChatGPT`), where the model and effort menus are.
+   - It is topmost and does not show in the taskbar or Alt+Tab. `ShowActivated=false` plus `WS_EX_NOACTIVATE` keep it from taking the focus.
+   - It is DPI-aware per monitor.
+   - It closes on click, or after 15 s (note) or 45 s (hold).
+   - The hook writes the texts to `badge.json` in the state directory. This avoids command-line quoting, and a newer figure replaces an older one.
+   - It is started through `cmd /c start`. A Node child spawned `detached` ran PowerShell 5.1 for 90 ms without executing the script (tested).
+   - `#jev figur aus|an|test` switches it off, back on, or shows a sample.
+7. **Prefix commands.** `#jev an <text>`, `#jev aus <text>` and `#jev <text>` send the text; `additionalContext` tells the model to ignore the command prefix. Only bare commands are held, because they have nothing to send: `#jev an`, `#jev aus`, `#jev`, `#jev? <question>`, `#jev status`, `#jev figur …` and `#jev hilfe`.
+
+Every check is logged to `guard-log.jsonl` as `checked` (with level and steps), `no-new-task`, `passed-after-hold` or `failed`, without prompt text. `#jev status` shows the latest entry.
 
 **Why Jev does not switch model or effort itself (tested live on 2026-09-27, Claude desktop app, Claude Code 2.1.281).**
 
