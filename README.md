@@ -2,7 +2,7 @@
 
 ## Jev – die richtige KI-Modellwahl vor jeder Aufgabe (Claude Code & Codex)
 
-Jev ordnet jede neue Aufgabe ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und gewichteter Erfahrungswerte; den Effort wählt Jev pro Modell (nur Stufen, die das Modell in der App wirklich hat). **In Claude Code stellt Jev den Effort für jede Nachricht selbst ein, ein Modellwechsel braucht einen Klick („Jev folgen“).** Ein anderes Modell schlägt Jev nur vor, wenn es **klar** besser ist (≥ 4 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 25 % günstiger**. Codex bietet dafür keine Schnittstelle: Dort hält Jev die Nachricht einmal an.
+Jev prüft jede Nachricht zuerst selbst: Ist das eine neue Aufgabe? Antworten wie „ok“ oder „mach weiter“ lässt er in Ruhe. Bei einer neuen Aufgabe ordnet er sie ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und gewichteter Erfahrungswerte, den Effort pro Modell (nur Stufen, die das Modell in der App wirklich hat). Das Ergebnis steht als **eine Zeile** im Chat. Ein anderes Modell schlägt Jev nur vor, wenn es **klar** besser ist (≥ 4 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 25 % günstiger**. **Jev hält nie eine Nachricht an.** Umstellen musst du selbst im Modellmenü: Weder Claude noch Codex lassen ein Plugin Modell oder Effort ändern (in der Claude-Desktop-App live getestet, Details unten).
 
 **Installieren (Claude Code):**
 
@@ -24,17 +24,17 @@ Voraussetzungen: Node.js ≥ 20 im PATH und ein Vercel-AI-Gateway-Schlüssel als
 
 | Eingabe | Wirkung |
 |---|---|
-| `#jev an` | Jev für diesen Chat einschalten (einmal) – danach läuft Jev bei jeder Nachricht automatisch |
-| `#jev aus` | Jev für diesen Chat ausschalten |
-| `#jev status` | Was Jev eingestellt hat und worauf die letzte Nachricht wirklich lief |
+| `#jev an [Text]` | Jev für diesen Chat einschalten (einmal). Ein Text dahinter wird ganz normal gesendet. |
+| `#jev aus [Text]` | Jev für diesen Chat ausschalten |
+| `#jev <Text>` | Text senden, Jev schaut einmal drauf |
+| `#jev status` | Aktuelle Einstellung und Jevs letzte Einschätzung |
 | `#jev` | Chat analysieren (Fortschritt, Hindernis, nächster Schritt) |
-| `#jev <Aufgabe>` | Modell + Effort für eine Aufgabe empfehlen |
 | `#jev? <Frage>` | Ja/Nein-Frage zum Chat, Antwort in % |
 | `#jev hilfe` | Befehle anzeigen |
 
-**Claude Code:** Bevor Claude arbeitet, ruft es einen Jev-Skill auf (`jev:effort-…`, `jev:model-…`). Der stellt Effort oder Modell für den Rest dieser Nachricht um, das Modellmenü selbst bleibt unverändert. Bei einem Modellwechsel fragt Claude einmal nach: Ein Klick auf „Jev folgen“ stellt um, danach bleibt der Chat auf diesem Modell. Die erste Antwort jeder Nachricht läuft noch mit der Menü-Einstellung, weil sie nur den Skill aufruft. Wer ein Jev-Modell dauerhaft nutzt, stellt es am besten auch im Menü ein, dann entfällt dieser Zwischenschritt. `#jev status` zeigt, worauf die letzte Nachricht tatsächlich lief.
+Nur die reinen Befehle ohne Text (`#jev an`, `#jev status`, `#jev`, `#jev?`, `#jev hilfe`) gehen nicht an das Modell, alles mit Text wird gesendet. Jede geprüfte Nachricht kostet einen Jev-Aufruf (etwa 1 Sekunde).
 
-**Codex:** Wird eine Nachricht angehalten, Modell und Effort im Modellmenü umstellen und **dieselbe Nachricht nochmal senden** (↑, Enter). Wer Jev ignorieren will, sendet sie einfach direkt nochmal. Details, Benchmark-Quellen und Grenzen: [docs/model-routing.md](docs/model-routing.md).
+**Warum Jev nicht selbst umstellt:** Claude Code liest Modell und Effort zwar aus Skills (`model:`/`effort:` im Skill-Kopf). In der Desktop-App (2.1.281) gingen im Live-Test aber alle Anfragen weiter mit Modell und Effort aus dem Menü raus. Die App setzt ihre Menü-Einstellung bei jeder Anfrage durch und verweigert einer Sitzung ausdrücklich, ihre eigenen Nachrichten umzupreisen. Codex bietet in Hooks und Skills gar keine solche Schnittstelle. Details, Benchmark-Quellen und Grenzen: [docs/model-routing.md](docs/model-routing.md).
 
 ---
 

@@ -8,7 +8,7 @@
     {
       "name": "jev",
       "source": "./plugins/jev-claude",
-      "description": "Model and effort per task from benchmarks: effort set automatically per message, model switch with one click."
+      "description": "Checks each new task against benchmarks: do model and effort fit? One line, never holds a message."
     }
   ]
 }

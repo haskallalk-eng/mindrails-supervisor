@@ -222,16 +222,30 @@ test('next-task model suggestion uses the highest probability among the offered 
   assert.deepEqual([bad.ok, bad.reason], [false, 'JEV_INVALID_RESPONSE']);
   const noTask = await inspectChat({ ...input, task: '' }, async (_u, o) => { assert.ok(!JSON.parse(o.body).questions.next_model); return new Response(JSON.stringify({ answers: base, usage: { input_tokens: 1, output_tokens: 1 } })); });
   assert.equal(noTask.nextModel, null);
+  // Jev's own gate: with `gate` the same request also asks whether this is a new task at all.
+  const top = { type: 'choice', choice: ids[0], confidence: 1, probabilities: Object.fromEntries(ids.map((k, i) => [k, i === 0 ? 1 : 0])) };
+  const gated = await inspectChat({ ...input, gate: true }, async (_u, o) => {
+    const b = JSON.parse(o.body); assert.equal(b.questions.new_task.type, 'noul');
+    return new Response(JSON.stringify({ answers: { ...base, next_model: top, new_task: { type: 'noul', noul: 0.2 } }, usage: { input_tokens: 1, output_tokens: 1 } }));
+  });
+  assert.deepEqual(gated.newTask, { yes: 0.2 });
+  const missing = await inspectChat({ ...input, gate: true }, reply(top));
+  assert.deepEqual([missing.ok, missing.reason], [false, 'JEV_INVALID_RESPONSE'], 'no invented gate answer');
+  assert.equal(r.newTask, null, 'the gate question is only asked when requested');
 });
 
 test('prompt hook: #jev commands are recognized, normal prompts are not; focus round-trips', async (t) => {
   const { parseJevCommand, writeFocus, readFocus, formatResult } = await import('../dist/jev-hook.js');
   assert.equal(parseJevCommand('Mach weiter'), null);
   assert.equal(parseJevCommand('Bitte #jev nutzen'), null);
-  assert.deepEqual(parseJevCommand('#jev'), { kind: 'analyze', task: undefined });
-  assert.deepEqual(parseJevCommand('  #JEV  Baue Tests '), { kind: 'analyze', task: 'Baue Tests' });
+  assert.deepEqual(parseJevCommand('#jev'), { kind: 'analyze' });
+  assert.deepEqual(parseJevCommand('  #JEV  Baue Tests '), { kind: 'once', task: 'Baue Tests' });
   assert.deepEqual(parseJevCommand('#jev? Sind die Tests grün?'), { kind: 'question', question: 'Sind die Tests grün?' });
   assert.deepEqual(parseJevCommand('#jev an'), { kind: 'guard', enabled: true });
+  // The reported bug: "#jev an <Text>" was read as "#jev <Aufgabe>" and held back.
+  assert.deepEqual(parseJevCommand('#jev an Ich kann Jev auch selber prüfen'), { kind: 'guard', enabled: true, rest: 'Ich kann Jev auch selber prüfen' });
+  assert.deepEqual(parseJevCommand('#jev an: Baue X'), { kind: 'guard', enabled: true, rest: 'Baue X' });
+  assert.deepEqual(parseJevCommand('#jev anpassen: Parser'), { kind: 'once', task: 'anpassen: Parser' });
   assert.deepEqual(parseJevCommand('#jev AUS'), { kind: 'guard', enabled: false });
   assert.deepEqual(parseJevCommand('#jev hilfe'), { kind: 'help' });
   assert.deepEqual(parseJevCommand('#jev Status'), { kind: 'status' });
@@ -254,20 +268,28 @@ test('prompt hook process: normal prompt passes silently and records focus; #jev
   const out = JSON.parse(cmd.stdout); assert.equal(out.decision, 'block'); assert.match(out.reason, /JEV_KEY_MISSING/);
 });
 
-test('guard mode: first send is held with a recommendation, the identical second send passes; short prompts pass', async (t) => {
+test('guard mode never holds a message: "#jev an <Text>" sends the text, and Jev itself decides which messages need a look', async (t) => {
   const { spawnSync } = await import('node:child_process');
-  const http = await import('node:http');
   const dir = await mkdtemp(join(tmpdir(), 'jev-guard-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const env = { ...process.env, JEV_PANEL_HOME: dir, JEV_NO_USER_KEY: '1', AI_GATEWAY_API_KEY: '' };
   const run = (prompt) => spawnSync(process.execPath, ['dist/jev-hook.js'], { input: JSON.stringify({ session_id: '11111111-2222-4333-8444-555555555555', transcript_path: 'tests/fixtures/claude-session.jsonl', prompt }), env, encoding: 'utf8' });
-  assert.match(JSON.parse(run('#jev an').stdout).reason, /für DIESEN Chat AN/);
-  // Without a key Jev cannot answer: the prompt must go through (never blocked), with a visible notice.
-  const noKey = JSON.parse(run('Baue bitte einen Parser für CSV-Dateien').stdout);
-  assert.equal(noKey.decision, undefined); assert.match(noKey.systemMessage, /JEV_KEY_MISSING.*normal gesendet/);
-  assert.equal(run('ok danke').stdout, '');
+  // Switched on AND the text goes through (it used to be held with only "edit prompt" left).
+  const on = JSON.parse(run('#jev an Ich kann Jev auch selber prüfen lassen').stdout);
+  assert.equal(on.decision, undefined);
+  assert.equal(on.systemMessage, 'Jev ist für diesen Chat jetzt AN. Jev: keine Einschätzung (JEV_KEY_MISSING) – die Nachricht läuft normal.');
+  assert.match(on.hookSpecificOutput.additionalContext, /„#jev an“ ist ein Befehl an das Jev-Plugin/);
+  // No length rule of ours: every message goes to Jev, which answers "new task?" itself. Without a key: notice, never held.
+  for (const p of ['ok danke', 'Baue bitte einen Parser für CSV-Dateien']) {
+    const o = JSON.parse(run(p).stdout); assert.equal(o.decision, undefined); assert.match(o.systemMessage, /JEV_KEY_MISSING/);
+  }
   assert.equal(run('/compact').stdout, '');
-  assert.match(JSON.parse(run('#jev aus').stdout).reason, /AUS/);
+  assert.match(JSON.parse(run('#jev status').stdout).reason, /Jev: {10}AN – prüft jede Nachricht selbst, hält nie etwas an/);
+  const off = JSON.parse(run('#jev aus und jetzt weiter').stdout);
+  assert.deepEqual([off.decision, off.systemMessage], [undefined, 'Jev ist für diesen Chat jetzt AUS.']);
   assert.equal(run('Baue bitte einen Parser für CSV-Dateien').stdout, '');
+  assert.match(JSON.parse(run('#jev an').stdout).reason, /für DIESEN Chat AN/);
+  const once = JSON.parse(run('#jev Refaktoriere den Parser').stdout);
+  assert.equal(once.decision, undefined); assert.match(once.hookSpecificOutput.additionalContext, /„#jev“ ist ein Befehl/);
 });
 
 test('guard is per chat and passes immediately when Jev recommends the current model', async (t) => {
@@ -283,23 +305,41 @@ test('guard is per chat and passes immediately when Jev recommends the current m
   assert.equal(sameModel(null, 'tier-everyday'), false);
 });
 
-test('recommendation text shows task, model, benchmark reason, exact effort and how to continue', async () => {
-  const { formatResult } = await import('../dist/jev-hook.js');
+test('one Jev line per new task: better model with its own effort, effort only, fits, unknown setting', async () => {
+  const { recommendationLine, recommend } = await import('../dist/jev-hook.js');
   const j = (choice, probabilities) => ({ choice, confidence: 1, probabilities });
-  const app = { kind: 'claude', name: 'Claude', tiers: [], candidates: ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
-    readTurns: () => [], current: () => ({ model: 'claude-fable-5-1', effort: null }), efforts: m => /haiku/.test(m) ? [] : ['low', 'medium', 'high', 'xhigh', 'max'],
-    display: m => ({ 'claude-opus-5-5': 'Opus 5.5', 'claude-fable-5-1': 'Fable 5.1', 'claude-opus-5': 'Opus 5' })[m] ?? String(m) };
+  const app = current => ({ kind: 'claude', name: 'Claude', tiers: [], candidates: ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    readTurns: () => [], current: () => current, efforts: m => /haiku/.test(m) ? [] : ['low', 'medium', 'high', 'xhigh', 'max'],
+    display: m => ({ 'claude-opus-5-5': 'Opus 5.5', 'claude-fable-5-1': 'Fable 5.1', 'claude-opus-5': 'Opus 5' })[m] ?? String(m) });
   const r = { ok: true, progress: j('advancing', { advancing: 1 }), blocker: j('none', { none: 1 }), next_step: j('continue', { continue: 1 }), question: null,
-    nextModel: null, taskKind: j('coding', { coding: 0.9, simple: 0.1 }), difficulty: j('normal', { normal: 0.7, hard: 0.3 }),
+    nextModel: null, taskKind: j('coding', { coding: 0.9, simple: 0.1 }), difficulty: j('normal', { normal: 0.7, hard: 0.3 }), newTask: { yes: 0.9 },
     effort: j('xhigh', { xhigh: 0.6, high: 0.3, low: 0.1, medium: 0, max: 0, ultra: 0 }), stats: { mode: 'complete' }, usage: { input_tokens: 5, output_tokens: 1 } };
-  const text = formatResult(r, 'x', app, { guard: true });
-  assert.match(text, /Aufgabe: Coding · normal/);
-  assert.match(text, /Modell:  Opus 5.5   \(aktuell: Fable 5.1\)/);
-  assert.match(text, /FrontierCode v1.1 Main \(Herstellerangaben\): Opus 5.5 54,4 · Fable 5.1 50,3/);
-  // Effort comes from the weighted evidence for THIS model (Opus 5.5: medium), not from Jev's generic pick (xhigh).
-  assert.match(text, /Effort:  Mittel \(medium\).*\[Erfahrungswert für dieses Modell\]/);
-  assert.doesNotMatch(text, /sehr hoch/);
-  assert.match(text, /dieselbe Nachricht nochmal senden/);
+  // Fable 5.1 on coding: Opus 5.5 scores higher and costs less. Its effort comes from the evidence for Opus 5.5 (Mittel), not Jev's generic pick (xhigh).
+  assert.equal(recommendationLine(r, app({ model: 'claude-fable-5-1', effort: 'max' })),
+    'Jev (Coding, normal): Opus 5.5 · Mittel wäre besser als Fable 5.1 · Max – FrontierCode v1.1 Main: Opus 5.5 54,4 · Fable 5.1 50,3 – gleich gut, mind. 25 % günstiger. Umstellen im Modellmenü.');
+  assert.equal(recommendationLine(r, app({ model: 'claude-opus-5-5', effort: 'max' })), 'Jev (Coding, normal): Opus 5.5 passt, Effort Mittel empfohlen (eingestellt: Max).');
+  assert.equal(recommendationLine(r, app({ model: 'claude-opus-5-5', effort: 'medium' })), 'Jev (Coding, normal): Opus 5.5 · Mittel passt.');
+  assert.match(recommendationLine(r, app({ model: null, effort: null })), /^Jev \(Coding, normal\): empfohlen .+ – die aktuelle Einstellung ist noch unbekannt\.$/);
+  assert.doesNotMatch(recommendationLine(r, app({ model: 'claude-fable-5-1', effort: 'max' })), /sehr hoch/);
+  assert.equal(recommend(r, app({ model: 'claude-fable-5-1', effort: 'max' })).interrupt, true);
+});
+
+test('Claude transcript: the setting the latest reply really ran on', async (t) => {
+  const { claudeSetting } = await import('../dist/jev-hook.js');
+  const { writeFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-setting-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, 's.jsonl');
+  const reply = (model, extra) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', model, content: [{ type: 'text', text: 'ok' }] }, ...extra });
+  await writeFile(file, [
+    JSON.stringify({ type: 'user', message: { role: 'user', content: 'Aufgabe' } }),
+    reply('claude-fable-5-1', { effort: 'max', perTurnEffort: 'max' }),
+    reply('claude-opus-5-5', { effort: 'max', perTurnEffort: 'xhigh' }),
+    reply('claude-haiku-4-5', { isSidechain: true, effort: 'low' }),
+    reply('<synthetic>', {}),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: 'Nächste Nachricht' } }),
+  ].join('\n'));
+  assert.deepEqual(claudeSetting(file), { model: 'claude-opus-5-5', effort: 'xhigh' }, 'per-turn effort wins, side agents and synthetic replies are skipped');
+  assert.deepEqual(claudeSetting(join(dir, 'fehlt.jsonl')), { model: null, effort: null });
 });
 
 test('benchmark policy: small gaps never switch, clear gaps and big savings do', async () => {
@@ -417,149 +457,3 @@ test('weighted spectrum: veto on benchmark picks, fallback where no benchmark ex
   assert.equal(spectrumEffort('claude-haiku-4-5-20251001', 'simple'), null);
 });
 
-// ---------- Claude: model and effort per message through Jev's plugin skills ----------
-const claudeNames = m => ({ 'claude-opus-5-5': 'Opus 5.5', 'claude-fable-5-1': 'Fable 5.1', 'claude-haiku-4-5': 'Haiku 4.5', 'claude-sonnet-5': 'Sonnet 5' })[m] ?? String(m);
-const cUser = text => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
-const cReply = (model, efforts, content = [{ type: 'text', text: 'ok' }], extra = {}) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', model, content }, ...efforts, ...extra });
-
-test('Claude transcript: menu setting vs what the message really ran on, Jev skills and the one-click question', async (t) => {
-  const { lastClaudeTurn } = await import('../dist/jev-hook.js');
-  const { writeFile } = await import('node:fs/promises');
-  const dir = await mkdtemp(join(tmpdir(), 'jev-turn-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const file = join(dir, 's.jsonl');
-  await writeFile(file, [
-    cUser('Erste Aufgabe'), cReply('claude-fable-5-1', { effort: 'max', perTurnEffort: 'max' }),
-    cUser('Zweite Aufgabe bitte'),
-    cReply('claude-fable-5-1', { effort: 'max', perTurnEffort: 'max' }, [{ type: 'tool_use', id: 't1', name: 'AskUserQuestion', input: { questions: [{ question: 'Jev empfiehlt Opus 5.5 · Mittel statt Fable 5.1 · Max. Umstellen?' }] } }]),
-    JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'Jev folgen' }] } }),
-    cReply('claude-fable-5-1', { effort: 'max', perTurnEffort: 'max' }, [{ type: 'tool_use', id: 't2', name: 'Skill', input: { skill: 'jev:model-opus-5-5' } }, { type: 'tool_use', id: 't3', name: 'Skill', input: { skill: 'jev:effort-medium' } }]),
-    JSON.stringify({ type: 'user', isMeta: true, message: { role: 'user', content: 'Jev: Der Rest dieser Nachricht läuft auf Opus 5.5.' } }),
-    cReply('claude-opus-5-5', { effort: 'max', perTurnEffort: 'medium' }),
-    cReply('claude-haiku-4-5', {}, undefined, { isSidechain: true }),
-    cUser('Dritte Nachricht, gerade gesendet'), // may already be recorded without a reply
-  ].join('\n'));
-  const turn = lastClaudeTurn(file);
-  assert.deepEqual(turn.menu, { model: 'claude-fable-5-1', effort: 'max' });
-  assert.deepEqual(turn.ran, { model: 'claude-opus-5-5', effort: 'medium' });
-  assert.deepEqual(turn.jevSkills, ['jev:model-opus-5-5', 'jev:effort-medium']);
-  assert.equal(turn.asked, true);
-  assert.equal(lastClaudeTurn(join(dir, 'fehlt.jsonl')), null);
-});
-
-test('Claude per message: effort switches automatically, a model switch takes one click and then sticks', async () => {
-  const { planClaudeMessage, settleChat, claudeInstructions } = await import('../dist/jev-hook.js');
-  const menu = { model: 'claude-fable-5-1', effort: 'max' };
-  const d = (model, effort, stayEffort, switchModel, why = '') => ({ model, effort, stayEffort, switchModel, why, reason: null });
-  // Model fits, effort differs: effort skill only, no question.
-  const p1 = planClaudeMessage({ menu, state: {}, display: claudeNames, decision: d('claude-fable-5-1', 'xhigh', 'xhigh', false) });
-  assert.deepEqual([p1.skills, p1.ask, p1.event], [['jev:effort-xhigh'], null, 'auto']);
-  assert.match(claudeInstructions(p1), /bevor du mit der Aufgabe beginnst – das Skill-Tool mit skill "jev:effort-xhigh" auf\./);
-  assert.equal(p1.notice, 'diese Nachricht läuft auf Fable 5.1 · Extra hoch (Menü: Fable 5.1 · Max)');
-  // Everything fits: nothing injected.
-  const p2 = planClaudeMessage({ menu, state: {}, display: claudeNames, decision: d('claude-fable-5-1', 'max', 'max', false) });
-  assert.deepEqual([p2.skills, claudeInstructions(p2), p2.notice], [[], null, 'Fable 5.1 · Max passt']);
-  // Clearly better model: one-click question, no skill before the answer.
-  const p3 = planClaudeMessage({ menu, state: {}, display: claudeNames, decision: d('claude-opus-5-5', 'medium', 'xhigh', true, 'FrontierCode: Opus 5.5 54,4 · Fable 5.1 50,3') });
-  assert.deepEqual([p3.event, p3.skills], ['asked', []]);
-  assert.equal(p3.ask.question, 'Jev empfiehlt Opus 5.5 · Mittel statt Fable 5.1 · Max. Umstellen?');
-  assert.deepEqual(p3.ask.follow.skills, ['jev:model-opus-5-5', 'jev:effort-medium']);
-  assert.deepEqual([p3.ask.stay.label, p3.ask.stay.skills], ['Fable 5.1 behalten', ['jev:effort-xhigh']]);
-  const ctx = claudeInstructions(p3);
-  assert.match(ctx, /AskUserQuestion-Tool genau diese eine Frage/);
-  assert.match(ctx, /label "Jev folgen", description "Opus 5.5 · Mittel – FrontierCode: Opus 5.5 54,4 · Fable 5.1 50,3\. Gilt dann für diesen Chat\."/);
-  assert.match(ctx, /Antwort „Jev folgen“: rufe sofort das Skill-Tool zweimal im selben Schritt auf: mit skill "jev:model-opus-5-5" und mit skill "jev:effort-medium"\./);
-  assert.match(ctx, /Antwort „Fable 5.1 behalten“: rufe sofort das Skill-Tool mit skill "jev:effort-xhigh" auf\./);
-  // The user clicked "Jev folgen" and the transcript shows Opus 5.5 at medium: accepted and remembered.
-  const s4 = settleChat(p3.state, { menu, ran: { model: 'claude-opus-5-5', effort: 'medium' }, jevSkills: ['jev:model-opus-5-5', 'jev:effort-medium'], asked: true }, menu, claudeNames);
-  assert.deepEqual([s4.state.jevModel, s4.state.lastEffort, s4.state.pendingAsk, s4.warning, s4.events[0].event], ['claude-opus-5-5', 'medium', undefined, null, 'accepted']);
-  // Next task, Opus 5.5 still fits: switched automatically, no second question.
-  const p5 = planClaudeMessage({ menu, state: s4.state, display: claudeNames, decision: d('claude-opus-5-5', 'high', 'high', false) });
-  assert.deepEqual([p5.skills, p5.ask], [['jev:model-opus-5-5', 'jev:effort-high'], null]);
-  // Short follow-up ("weiter"): no Jev call, same model and last effort; the previous message is checked.
-  const s6 = settleChat(p5.state, { menu, ran: { model: 'claude-opus-5-5', effort: 'high' }, jevSkills: [], asked: false }, menu, claudeNames);
-  assert.deepEqual([s6.state.lastCheck.ok, s6.warning], [true, null]);
-  const p6 = planClaudeMessage({ menu, state: s6.state, display: claudeNames, decision: null });
-  assert.deepEqual([p6.skills, p6.event, p6.notice], [['jev:model-opus-5-5', 'jev:effort-high'], 'kept', 'läuft wie zuletzt auf Opus 5.5 · Hoch (Menü: Fable 5.1 · Max)']);
-  // Claude ignored the instruction: the next message says so instead of pretending.
-  const s7 = settleChat(p6.state, { menu, ran: menu, jevSkills: [], asked: false }, menu, claudeNames);
-  assert.equal(s7.state.lastCheck.ok, false);
-  assert.equal(s7.warning, '⚠ letzte Nachricht lief auf Fable 5.1 · Max statt Opus 5.5 · Hoch');
-  // The user then picks Opus 5.5 in the menu: no model skill needed any more.
-  const menu2 = { model: 'claude-opus-5-5', effort: 'high' };
-  assert.equal(settleChat(s4.state, { menu: menu2, ran: menu2, jevSkills: [], asked: false }, menu2, claudeNames).state.jevModel, undefined);
-});
-
-test('Claude per message: a declined model is not offered again until Jev once says the chat fits; a skipped question is no decline', async () => {
-  const { planClaudeMessage, settleChat } = await import('../dist/jev-hook.js');
-  const menu = { model: 'claude-opus-5-5', effort: 'medium' };
-  const toHaiku = { model: 'claude-haiku-4-5', effort: null, stayEffort: 'low', switchModel: true, why: 'einfache Aufgabe', reason: 'saving' };
-  const p1 = planClaudeMessage({ menu, state: {}, display: claudeNames, decision: toHaiku });
-  assert.deepEqual(p1.ask.follow.skills, ['jev:model-haiku-4-5'], 'Haiku has no effort setting');
-  assert.equal(p1.ask.question, 'Jev empfiehlt Haiku 4.5 statt Opus 5.5 · Mittel. Umstellen?');
-  const s1 = settleChat(p1.state, { menu, ran: { model: 'claude-opus-5-5', effort: 'low' }, jevSkills: ['jev:effort-low'], asked: true }, menu, claudeNames);
-  assert.deepEqual([s1.state.declinedModel, s1.state.lastEffort, s1.events[0].event], ['claude-haiku-4-5', 'low', 'declined']);
-  const p2 = planClaudeMessage({ menu, state: s1.state, display: claudeNames, decision: toHaiku });
-  assert.deepEqual([p2.ask, p2.skills], [null, ['jev:effort-low']]);
-  assert.match(p2.notice, /Wechsel zu Haiku 4.5 hattest du abgelehnt/);
-  const p3 = planClaudeMessage({ menu, state: p2.state, display: claudeNames, decision: { ...toHaiku, model: 'claude-opus-5-5', effort: 'medium', stayEffort: 'medium', switchModel: false } });
-  assert.equal(p3.state.declinedModel, undefined);
-  assert.ok(planClaudeMessage({ menu, state: p3.state, display: claudeNames, decision: toHaiku }).ask, 'offered again after Jev said the chat fits');
-  const skipped = settleChat(p1.state, { menu, ran: menu, jevSkills: [], asked: false }, menu, claudeNames);
-  assert.deepEqual([skipped.state.declinedModel, skipped.events[0].event], [undefined, 'not-asked']);
-  // "Jev folgen" clicked, skill invoked, but Claude Code kept the session model: reported, not offered again.
-  const refused = settleChat(p1.state, { menu, ran: menu, jevSkills: ['jev:model-haiku-4-5'], asked: true }, menu, claudeNames);
-  assert.deepEqual([refused.events[0].event, refused.state.declinedModel, refused.state.jevModel], ['not-applied', 'claude-haiku-4-5', undefined]);
-  assert.equal(refused.warning, '⚠ „Jev folgen“ gewählt, aber Claude Code hat Haiku 4.5 nicht angewendet (lief auf Opus 5.5 · Mittel)');
-  // First message of a new chat: model not known yet, only Jev's effort is applied.
-  const fresh = planClaudeMessage({ menu: { model: null, effort: null }, state: {}, display: claudeNames, decision: { model: null, effort: 'high', stayEffort: 'high', switchModel: false, why: '', reason: null } });
-  assert.deepEqual([fresh.skills, fresh.notice], [['jev:effort-high'], 'Effort für diese Nachricht: Hoch (Modell noch unbekannt – erst nach der ersten Antwort in diesem Chat)']);
-});
-
-test('Claude plugin ships one skill per model and effort Jev can set, each with only safe frontmatter', async () => {
-  const { SKILL_MODELS, SKILL_EFFORTS, modelSkill, effortSkill, skillsFor } = await import('../dist/jev-hook.js');
-  const skill = name => readFile(join('plugins/jev-claude/skills', name.slice('jev:'.length), 'SKILL.md'), 'utf8');
-  for (const [key, id] of Object.entries(SKILL_MODELS)) {
-    const text = await skill(modelSkill(key));
-    assert.ok(text.startsWith(`---\nname: ${modelSkill(key).slice(4)}\n`)); assert.ok(text.includes(`\nmodel: ${id}\n`)); assert.ok(text.includes('\nuser-invocable: false\n'));
-    // No allowed-tools/hooks: Claude Code runs such skills without a permission prompt.
-    assert.doesNotMatch(text, /allowed-tools|hooks:|disable-model-invocation|effort:/);
-  }
-  for (const effort of SKILL_EFFORTS) {
-    const text = await skill(effortSkill(effort));
-    assert.ok(text.includes(`\neffort: ${effort}\n`)); assert.doesNotMatch(text, /allowed-tools|hooks:|\nmodel:/);
-  }
-  assert.deepEqual(SKILL_EFFORTS, ['low', 'medium', 'high', 'xhigh', 'max']);
-  assert.equal(modelSkill('claude-haiku-4-5-20251001'), 'jev:model-haiku-4-5');
-  assert.equal(modelSkill('claude-opus-4-7'), null);
-  assert.equal(effortSkill('ultra'), null);
-  assert.deepEqual(skillsFor('claude-opus-5-5[1m]', 'max', { model: 'claude-opus-5-5', effort: 'max' }), [], 'nothing to do when the menu already matches');
-});
-
-test('Claude hook process: a short follow-up keeps the accepted model via additionalContext; #jev status reports it', async (t) => {
-  const { spawnSync } = await import('node:child_process');
-  const { writeFile } = await import('node:fs/promises');
-  const dir = await mkdtemp(join(tmpdir(), 'jev-cguard-')); t.after(() => rm(dir, { recursive: true, force: true }));
-  const session = '11111111-2222-4333-8444-555555555555', transcript = join(dir, 't.jsonl');
-  await writeFile(join(dir, 'guard.json'), JSON.stringify({ sessions: { [session]: true } }));
-  const { mkdir } = await import('node:fs/promises');
-  await mkdir(join(dir, 'chats'));
-  await writeFile(join(dir, 'chats', `${session}.json`), JSON.stringify({ jevModel: 'claude-opus-5-5', lastEffort: 'medium' }));
-  await writeFile(transcript, [cUser('Baue den Parser fertig'), cReply('claude-fable-5-1', { effort: 'max', perTurnEffort: 'max' }), cReply('claude-opus-5-5', { effort: 'max', perTurnEffort: 'medium' })].join('\n'));
-  const env = { ...process.env, JEV_PANEL_HOME: dir, JEV_NO_USER_KEY: '1', AI_GATEWAY_API_KEY: '', CLAUDE_EFFORT: '' };
-  const run = prompt => spawnSync(process.execPath, ['dist/jev-hook.js'], { input: JSON.stringify({ session_id: session, transcript_path: transcript, prompt }), env, encoding: 'utf8' });
-  const out = JSON.parse(run('weiter').stdout);
-  assert.equal(out.decision, undefined, 'never blocks');
-  assert.equal(out.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
-  assert.match(out.hookSpecificOutput.additionalContext, /mit skill "jev:model-opus-5-5" und mit skill "jev:effort-medium"/);
-  assert.equal(out.systemMessage, 'Jev: läuft wie zuletzt auf Opus 5.5 · Mittel (Menü: Fable 5.1 · Max)');
-  // Jev unreachable on a real task: the chat stays on the accepted model, with an honest notice.
-  const down = JSON.parse(run('Baue bitte einen Parser für CSV-Dateien').stdout);
-  assert.match(down.systemMessage, /keine Empfehlung \(JEV_KEY_MISSING\) – läuft wie zuletzt auf Opus 5.5/);
-  assert.match(down.hookSpecificOutput.additionalContext, /jev:model-opus-5-5/);
-  const status = JSON.parse(run('#jev status').stdout).reason;
-  assert.match(status, /Jev: {6}AN/); assert.match(status, /Menü: {5}Fable 5.1 · Max/); assert.match(status, /Modell: {3}Opus 5.5 – per Klick übernommen/);
-  assert.match(status, /Zuletzt: {2}lief auf Opus 5.5 · Mittel/);
-  const log = (await readFile(join(dir, 'guard-log.jsonl'), 'utf8')).trim().split('\n').map(l => JSON.parse(l));
-  assert.ok(log.some(e => e.event === 'kept' && e.skills.includes('jev:model-opus-5-5')));
-  assert.ok(!JSON.stringify(log).includes('Parser für CSV'), 'no prompt text in the log');
-});

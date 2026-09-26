@@ -1,14 +1,14 @@
 {
   "name": "jev",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Jev picks the right GPT model and reasoning effort for every Codex task, from published benchmarks.",
   "author": {
     "name": "Mindrails"
   },
   "interface": {
     "displayName": "Jev Modellwahl",
-    "shortDescription": "Model and effort recommendation before every task.",
-    "longDescription": "Type `#jev an` once in a conversation. Jev classifies each new task (coding, agentic, reasoning, research, simple; easy/normal/hard) and a fixed policy picks the model from published benchmarks. Messages pass immediately when the current model fits; a clear quality gap (4+ benchmark points) or a 25%+ saving holds the message once with a recommendation. Send it again to proceed. `#jev`, `#jev <task>`, `#jev? <question>`, `#jev aus`. Requires AI_GATEWAY_API_KEY (Vercel AI Gateway); chat excerpts are sent to Jev and may incur charges.",
+    "shortDescription": "Checks each new task: do model and effort fit?",
+    "longDescription": "Type `#jev an` once in a conversation. Jev first decides itself whether a message is a new task; replies like \"ok\" or \"weiter\" are left alone. For a new task it classifies the kind and difficulty, a fixed policy picks model and effort from published benchmarks and weighted user evidence, and one line shows whether the current setting fits. Messages are never held; switch in the model menu. `#jev`, `#jev <Text>`, `#jev? <Frage>`, `#jev status`, `#jev aus`. Requires AI_GATEWAY_API_KEY (Vercel AI Gateway); chat excerpts are sent to Jev and may incur charges.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": []

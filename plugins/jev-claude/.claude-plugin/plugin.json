@@ -1,7 +1,7 @@
 {
   "name": "jev",
-  "version": "0.5.0",
-  "description": "Jev picks model and effort for every task from published benchmarks and weighted user evidence: the effort is set per message automatically, a model switch takes one click. `#jev an` once per chat; `#jev hilfe` for commands.",
+  "version": "0.6.0",
+  "description": "Jev checks each message itself: new task or not. For new tasks it shows in one line whether model and effort fit, from published benchmarks and weighted user evidence. Never holds a message. `#jev an` once per chat; `#jev hilfe` for commands.",
   "author": {
     "name": "Mindrails",
     "url": "https://mindrails.de"
