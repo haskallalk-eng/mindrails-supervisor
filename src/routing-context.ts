@@ -135,5 +135,6 @@ export function toHistoryTurn(turn: any): HistoryTurn {
 export function describeContext(stats: ContextStats): string {
   if (stats.mode === 'none') return 'Neues Gespräch – kein Verlauf.';
   if (stats.mode === 'complete') return `Vollständiger sichtbarer Verlauf (${stats.totalTurns} Turns, ${(stats.sentBytes / 1024).toFixed(1)} KB).`;
+  if (!stats.digestedTurns && !stats.omittedTurns && !stats.olderUnread) return `Alle ${stats.totalTurns} Turns, aber lange Texte gekürzt (${(stats.sentBytes / 1024).toFixed(1)} KB aus ${(stats.sourceBytes / 1024).toFixed(0)} KB) – nicht der vollständige Wortlaut.`;
   return `Auswahl, nicht der vollständige Verlauf: ${stats.recentTurns} letzte Turns ausführlich, ${stats.digestedTurns} ältere als Kurzfassung, ${stats.notes} Einschränkungs-/Entscheidungs-/Problemsätze, ${stats.omittedTurns} Turns nicht einzeln enthalten (${(stats.sentBytes / 1024).toFixed(1)} KB aus ${(stats.sourceBytes / 1024).toFixed(0)} KB gelesenem Verlauf${stats.olderUnread ? ', noch ältere Turns nicht gelesen' : ''}).`;
 }

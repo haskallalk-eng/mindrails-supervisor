@@ -1,0 +1,8 @@
+{"type":"user","uuid":"u1","cwd":"C:/proj","message":{"role":"user","content":"Baue den Parser. Du darfst niemals die Datenbank löschen.<system-reminder>intern</system-reminder>"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"geheim"},{"type":"text","text":"Ich starte."},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm test"}},{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"src/parser.ts"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"1 failing"}]}}
+{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"Nebenagent"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Ein Test schlägt fehl."}]}}
+{"type":"user","isMeta":true,"message":{"role":"user","content":"meta"}}
+{"type":"user","uuid":"u2","message":{"role":"user","content":[{"type":"text","text":"Sind die Tests grün?"}]}}
+{"type":"custom-title","customTitle":"Parser bauen","sessionId":"x"}

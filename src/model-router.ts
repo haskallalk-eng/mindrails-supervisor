@@ -19,7 +19,7 @@ export function redactRoutingText(text: string): string {
     .replace(/(api[_-]?key|access[_-]?token|password|secret)(\s*[=:]\s*)([^\s,;]+)/gi, '$1$2[REDACTED]');
 }
 
-function redactContext(value: unknown): unknown {
+export function redactContext(value: unknown): unknown {
   if(typeof value==='string')return redactRoutingText(value);
   if(Array.isArray(value))return value.map(redactContext);
   if(value && typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,/api[_-]?key|access[_-]?token|password|secret/i.test(key)?'[REDACTED]':redactContext(item)]));

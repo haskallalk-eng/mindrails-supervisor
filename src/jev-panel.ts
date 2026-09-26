@@ -9,12 +9,14 @@ import { pathToFileURL } from 'node:url';
 import { CodexAppServer, resolveCodexBinary } from './codex-app-server.js';
 import { JevPanelSession, isThreadId, type PanelEvent } from './jev-panel-session.js';
 import { PANEL_HTML } from './jev-panel-ui.js';
+import { findClaudeSession, inspectChat, inspectLabels, listClaudeSessions, readClaudeSession } from './chat-inspect.js';
 import { gatewayKey } from './jev.js';
 import type { routeModel } from './model-router.js';
+import { describeContext } from './routing-context.js';
 
 export type PanelOptions = {
   codex: string[]; cwd: string; threadId?: string | null; write: boolean; port: number; stateDir: string;
-  token?: string; key?: () => string | undefined; route?: typeof routeModel; contextBudget?: number;
+  token?: string; key?: () => string | undefined; route?: typeof routeModel; contextBudget?: number; inspect?: typeof inspectChat;
 };
 
 export function stateDirectory(): string {
@@ -75,6 +77,7 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
   };
 
   let port = o.port;
+  let inspecting = false;
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -100,6 +103,10 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
         const list = await readOnly(s => s.call('thread/list', { limit: 40, sortKey: 'updated_at', useStateDbOnly: true }));
         return json(res, 200, { current: session.threadId, threads: (list.data ?? []).map((t: any) => ({ id: t.id, name: t.name, preview: String(t.preview ?? '').slice(0, 80), cwd: t.cwd })) });
       }
+      if (req.method === 'GET' && url.pathname === '/api/sources') {
+        const codex = await readOnly(s => s.call('thread/list', { limit: 30, sortKey: 'updated_at', useStateDbOnly: true }));
+        return json(res, 200, { labels: inspectLabels, claude: listClaudeSessions(), codex: (codex.data ?? []).map((t: any) => ({ kind: 'codex', id: t.id, title: t.name || String(t.preview ?? '').slice(0, 80) || t.id, updatedAt: (t.updatedAt ?? 0) * 1000, cwd: t.cwd })) });
+      }
       if (req.method !== 'POST') return json(res, 405, { error: 'METHOD' });
       if (req.headers['content-type'] !== 'application/json') return json(res, 415, { error: 'CONTENT_TYPE' });
       const input = await body(req);
@@ -111,6 +118,18 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
         run.catch(e => emit({ type: 'error', message: `Nicht gesendet: ${e.message}` }));
         emit({ type: 'busy' });
         return json(res, 202, { accepted: true });
+      }
+      if (url.pathname === '/api/inspect') {
+        if (!isThreadId(input.id) || !['claude', 'codex'].includes(input.kind) || (input.question != null && typeof input.question !== 'string')) return json(res, 400, { error: 'INVALID' });
+        if (inspecting) return json(res, 409, { error: 'BUSY' });
+        inspecting = true;
+        try {
+          let turns, olderUnread = false;
+          if (input.kind === 'claude') { const path = findClaudeSession(input.id); if (!path) return json(res, 404, { error: 'CHAT_NOT_FOUND' }); turns = readClaudeSession(path); }
+          else ({ turns, olderUnread } = await readOnly(s => s.readHistory(input.id)));
+          const result = await (o.inspect ?? inspectChat)({ turns, olderUnread, question: input.question ?? undefined, key: (o.key ?? gatewayKey)(), source: input.kind === 'claude' ? 'Claude Code session' : 'Codex conversation' });
+          return json(res, 200, { ...result, description: result.stats ? describeContext(result.stats) : null });
+        } finally { inspecting = false; }
       }
       if (url.pathname === '/api/approval') return json(res, session.resolveApproval(String(input.requestId), input.decision === 'accept' ? 'accept' : 'decline') ? 200 : 404, {});
       if (url.pathname === '/api/stop') { await session.interrupt(); return json(res, 200, {}); }

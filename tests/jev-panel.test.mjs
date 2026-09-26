@@ -167,3 +167,41 @@ test('panel: requests without token, wrong host or cross-site form posts are rej
   const status = await new Promise(r => request(h.base + '/api/state', { headers: { host: 'evil.example:80', 'x-jev-token': 'a'.repeat(48) } }, res => r(res.statusCode)).end());
   assert.equal(status, 403);
 });
+
+test('Claude Code transcripts become visible turns without thinking, meta or side chains', async (t) => {
+  const { readClaudeSession, listClaudeSessions, findClaudeSession } = await import('../dist/chat-inspect.js');
+  const { mkdir, copyFile } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'jev-claude-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const id = '11111111-2222-4333-8444-555555555555';
+  await mkdir(join(root, 'C--proj')); await copyFile('tests/fixtures/claude-session.jsonl', join(root, 'C--proj', `${id}.jsonl`));
+  const turns = readClaudeSession(findClaudeSession(id, root));
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0].items[0].text, 'Baue den Parser. Du darfst niemals die Datenbank löschen.');
+  assert.deepEqual(turns[0].items.slice(1).map(i => i.type), ['agentMessage', 'command', 'fileChange', 'agentMessage']);
+  assert.equal(turns[0].items[2].status, 'failed');
+  const all = JSON.stringify(turns); assert.ok(!all.includes('geheim') && !all.includes('Nebenagent') && !all.includes('meta') && !all.includes('intern'));
+  const [listed] = listClaudeSessions(root); assert.equal(listed.title, 'Parser bauen'); assert.equal(listed.cwd, 'C:/proj');
+  assert.equal(findClaudeSession('../../etc/passwd', root), null);
+});
+
+test('asking Jev about a chat: fixed judgments plus a yes/no probability; failures are reported, not invented', async () => {
+  const { inspectChat } = await import('../dist/chat-inspect.js');
+  const turns = [turn(1, 'Baue den Parser. password=hunter2', 'Ein Test schlägt fehl.')];
+  const probs = keys => Object.fromEntries(keys.map((k, i) => [k, i === 0 ? 1 : 0]));
+  const ok = { answers: {
+    progress: { type: 'choice', choice: 'stalled', confidence: 0.8, probabilities: { ...probs(['stalled', 'advancing', 'complete', 'uncertain']) } },
+    blocker: { type: 'choice', choice: 'ineffective_approach', confidence: 0.7, probabilities: probs(['ineffective_approach', 'none', 'missing_information', 'environment', 'verification_gap', 'requirement_mismatch', 'uncertain']) },
+    next_step: { type: 'choice', choice: 'change_approach', confidence: 0.7, probabilities: probs(['change_approach', 'continue', 'ask_question', 'fix_environment', 'verify_result', 'realign', 'review']) },
+    user_question: { type: 'noul', noul: 0.1 } }, usage: { input_tokens: 10, output_tokens: 5 } };
+  let sent;
+  const r = await inspectChat({ turns, question: 'Sind die Tests grün?', key: 'k', source: 'test' }, async (_u, o) => { sent = JSON.parse(o.body); return new Response(JSON.stringify(ok)); });
+  assert.equal(r.ok, true); assert.equal(r.progress.choice, 'stalled'); assert.equal(r.question.yes, 0.1);
+  assert.equal(sent.state.userQuestion, 'Sind die Tests grün?'); assert.equal(sent.questions.user_question.type, 'noul');
+  assert.ok(!JSON.stringify(sent).includes('hunter2'));
+  const bad = await inspectChat({ turns, key: 'k', source: 'test' }, async () => new Response(JSON.stringify({ ...ok, answers: { ...ok.answers, progress: { ...ok.answers.progress, choice: 'invented' } } })));
+  assert.deepEqual([bad.ok, bad.reason], [false, 'JEV_INVALID_RESPONSE']);
+  let calls = 0;
+  const down = await inspectChat({ turns, key: 'k', source: 'test' }, async () => { calls++; return new Response('', { status: 503 }); });
+  assert.deepEqual([down.ok, down.reason, calls], [false, 'JEV_HTTP_503', 1]);
+  assert.equal((await inspectChat({ turns, key: '', source: 'test' })).reason, 'JEV_KEY_MISSING');
+});

@@ -34,16 +34,29 @@ footer{border-top:1px solid var(--line);background:var(--panel);padding:10px 14p
 textarea{width:100%;min-height:64px;max-height:40vh;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg)}
 textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 .hint{font-size:11.5px;color:var(--muted)}
+.tabs{display:flex;gap:4px}.tab{border:none;background:none;padding:3px 10px;border-radius:99px;color:var(--muted)}.tab.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.view{display:flex;flex-direction:column;flex:1;min-height:0}.view[hidden]{display:none}
+#ask main{gap:12px}.field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.field select,.field input{width:100%;padding:6px 8px;font-size:13.5px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text)}
+.yes{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
 </style></head><body>
 <header>
-  <div class="row"><h1>Jev</h1><div class="grow title" id="title">–</div><span class="pill" id="status">verbinde …</span></div>
-  <div class="row"><select id="threads" class="grow" aria-label="Gespräch"></select><button id="fork" hidden title="Verlauf in ein neues Gespräch kopieren und dort fortsetzen">Abzweig</button></div>
+  <div class="row"><h1>Jev</h1><div class="tabs"><button class="tab on" id="tabRun">Ausführen</button><button class="tab" id="tabAsk">Fragen</button></div><div class="grow"></div><span class="pill" id="status">verbinde …</span></div>
+  <div class="row runOnly"><div class="grow title" id="title">–</div></div>
+  <div class="row runOnly"><select id="threads" class="grow" aria-label="Gespräch"></select><button id="fork" hidden title="Verlauf in ein neues Gespräch kopieren und dort fortsetzen">Abzweig</button></div>
 </header>
-<main id="log" aria-live="polite"></main>
+<div class="view" id="run"><main id="log" aria-live="polite"></main>
 <footer>
   <textarea id="input" placeholder="Nachricht an Codex – Jev wählt vorher das Modell" aria-label="Nachricht"></textarea>
   <div class="row" style="margin-top:6px"><span class="hint grow" id="hint">Enter sendet · Umschalt+Enter neue Zeile</span><button id="stop" hidden>Stopp</button><button id="send" class="primary">Senden</button></div>
-</footer>
+</footer></div>
+<div class="view" id="ask" hidden><main>
+  <div class="sys">Jev liest den gewählten Chat und bewertet ihn. Jev schreibt keinen Freitext: Er beantwortet feste Fragen (Fortschritt, Hindernis, nächster Schritt) und deine Ja/Nein-Frage mit Wahrscheinlichkeiten. Es wird nichts ausgeführt.</div>
+  <label class="field">Chat<select id="source"></select></label>
+  <label class="field">Deine Ja/Nein-Frage (optional)<input id="question" maxlength="500" placeholder="z. B. Sind die Tests am Ende grün?"></label>
+  <div class="row"><span class="hint grow">Ein Jev-Aufruf pro Klick, kann Kosten verursachen.</span><button id="askBtn" class="primary">Jev fragen</button></div>
+  <div id="answer" style="display:flex;flex-direction:column;gap:10px"></div>
+</main></div>
 <script>
 const token=new URLSearchParams(location.search).get('t')||'';
 const $=id=>document.getElementById(id);
@@ -120,5 +133,25 @@ function connect(){
   es.onmessage=m=>{try{handle(JSON.parse(m.data));}catch{}};
   es.onerror=()=>{setStatus('Verbindung getrennt','err');es.close();setTimeout(connect,2000);};
 }
+let labels=null;
+function showView(ask){$('run').hidden=ask;$('ask').hidden=!ask;$('tabRun').classList.toggle('on',!ask);$('tabAsk').classList.toggle('on',ask);document.querySelectorAll('.runOnly').forEach(n=>n.hidden=ask);if(ask&&!$('source').options.length)loadSources();try{localStorage.setItem('jevTab',ask?'ask':'run')}catch{}}
+$('tabRun').onclick=()=>showView(false);$('tabAsk').onclick=()=>showView(true);
+async function loadSources(){const sel=$('source');sel.textContent='';sel.appendChild(el('option',null,'lade …'));
+  try{const s=await api('/api/sources');labels=s.labels;sel.textContent='';
+    for(const [name,list] of [['Claude Code',s.claude],['Codex',s.codex]]){const g=document.createElement('optgroup');g.label=name;for(const c of list){const o=el('option',null,c.title.slice(0,70)+' · '+new Date(c.updatedAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));o.value=c.kind+':'+c.id;g.appendChild(o);}sel.appendChild(g);}
+  }catch(e){sel.textContent='';sel.appendChild(el('option',null,'Chats nicht lesbar: '+e.message));}}
+function judgmentCard(title,j,map){const c=el('div','card');c.appendChild(el('div','head',title+': '+(map[j.choice]||j.choice)));
+  for(const [k,p] of Object.entries(j.probabilities).sort((a,b)=>b[1]-a[1]).slice(0,3)){const r=el('div','bar'+(k===j.choice?' win':''));r.style.gridTemplateColumns='150px 1fr 48px';r.appendChild(el('span',null,map[k]||k));const t=el('div','track'),f=el('div','fill');f.style.width=(p*100).toFixed(1)+'%';t.appendChild(f);r.appendChild(t);r.appendChild(el('span',null,(p*100).toFixed(0)+' %'));c.appendChild(r);}
+  return c;}
+$('askBtn').onclick=async()=>{const v=$('source').value;if(!v||!v.includes(':'))return;const [kind,id]=v.split(':');const out=$('answer');out.textContent='';const btn=$('askBtn');btn.disabled=true;setStatus('Jev liest den Chat …','run');
+  try{const r=await api('/api/inspect',{kind,id,question:$('question').value||null});
+    if(r.description)out.appendChild(el('div','sys','Gelesen: '+r.description));
+    if(!r.ok){out.appendChild(el('div','sys err','Jev konnte nicht antworten ('+r.reason+'). Keine Werte erfunden, kein Neuversuch.'));}
+    else{if(r.question){const c=el('div','card');c.appendChild(el('div','head','„'+r.question.text+'“'));c.appendChild(el('div','yes',(r.question.yes*100).toFixed(0)+' % ja'));c.appendChild(el('div','note',r.question.yes>0.65?'Jev hält „ja“ für wahrscheinlich.':r.question.yes<0.35?'Jev hält „nein“ für wahrscheinlich.':'Jev ist unsicher – der Chat zeigt es nicht eindeutig.'));out.appendChild(c);}
+      out.appendChild(judgmentCard('Fortschritt',r.progress,labels.progress));out.appendChild(judgmentCard('Hindernis',r.blocker,labels.blocker));out.appendChild(judgmentCard('Nächster Schritt',r.next_step,labels.next_step));
+      out.appendChild(el('div','note','Jev-Einschätzungen sind Wahrscheinlichkeiten, keine geprüften Fakten. Verbrauch: '+r.usage.input_tokens+' Eingabe-Tokens.'));}
+  }catch(e){out.appendChild(el('div','sys err',e.status===409?'Es läuft bereits eine Jev-Frage.':'Fehler: '+e.message));}
+  btn.disabled=false;setStatus(busy?'arbeitet …':'Bereit',busy?'run':'');};
+try{if(localStorage.getItem('jevTab')==='ask')showView(true)}catch{}
 api('/api/state').then(s=>{threadId=s.threadId;$('title').textContent=s.title||(s.threadId?s.threadId:'Neues Gespräch')+' · '+s.cwd;$('hint').textContent=(s.write?'Projektänderungen erlaubt':'Nur lesen (neue Gespräche)')+' · Enter sendet · Umschalt+Enter neue Zeile';setBusy(s.busy);loadThreads();connect();}).catch(()=>{setStatus('Kein Zugriff','err');sys('Token fehlt oder ist ungültig. Öffne die vom Startbefehl ausgegebene Adresse.','err');});
 </script></body></html>`;

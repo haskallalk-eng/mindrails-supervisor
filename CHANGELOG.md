@@ -5,6 +5,7 @@
 - Add `jev-panel`: loopback side panel that routes each message with Jev and runs it in the same Codex conversation via `codex app-server` (explicit model/effort per turn, streaming, user-answered approvals, stop, explicit fork).
 - Prevent double submits and parallel runs (UI, HTTP 409, message de-duplication, cross-process lock); respect Codex's single-writer lock instead of writing to conversations open in the Codex app.
 - Replace the 64 KB fallback for long conversations with a paginated, labeled selection of recent turns, constraints/decisions/problems and older-turn digests; use the conversation's current model as baseline.
+- Add a *Fragen* tab: Jev reads a Claude Code session or Codex conversation and returns progress, obstacle, next step and the probability for a user yes/no question.
 - Auto-detect the Codex desktop's bundled CLI when `codex` is not on PATH.
 
 - Add an automatic Codex turn review with plain-language German guidance and visible provider token usage.
