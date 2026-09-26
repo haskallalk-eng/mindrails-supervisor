@@ -3,7 +3,7 @@
 ## Unreleased — local Jev calibration update
 
 - Jev plugins for Claude Code (`plugins/jev-claude`) and Codex (`plugins/jev-codex`), installable from this repo's marketplaces; one self-contained hook bundle, no build step.
-- Benchmark-based model policy (`src/model-policy.ts`, `src/model-benchmarks.ts` with sources): Jev classifies task kind and difficulty; switches only for a 5+ point gap or a 50%+ saving at equal quality.
+- Benchmark-based model policy (`src/model-policy.ts`, `src/model-benchmarks.ts` with sources): Jev classifies task kind and difficulty; switches only for a 4+ point gap or a 25%+ saving at equal quality.
 - Codex support: rollout reader, current model and effort from the conversation, tiers and exact effort ids from the local Codex model catalog.
 - Exact effort ids and app labels (Niedrig/Mittel/Hoch/Extra hoch/Max, Codex `ultra`); no effort for Haiku 4.5.
 

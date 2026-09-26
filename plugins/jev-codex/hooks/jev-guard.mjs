@@ -19785,8 +19785,8 @@ var DIFFICULTIES = {
 };
 var KIND_BENCHMARK = { coding: "frontiercode", agentic: "terminalbench4", reasoning: "aaIndex", research: "aaIndex", simple: null };
 var TOLERANCE = { easy: 10, normal: 5, hard: 2 };
-var MIN_SWITCH_POINTS = 5;
-var MIN_SAVING = 0.5;
+var MIN_SWITCH_POINTS = 4;
+var MIN_SAVING = 0.25;
 function cost(key) {
   const f = MODEL_FACTS[key];
   return f?.price?.output ?? f?.costPerTask ?? null;

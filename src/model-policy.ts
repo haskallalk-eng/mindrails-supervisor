@@ -24,11 +24,11 @@ export const TOLERANCE: Record<Difficulty, number> = { easy: 10, normal: 5, hard
 /**
  * Minimum benchmark gain before the user is interrupted to switch up. Published
  * scores on these benchmarks carry roughly ±2-5 points of noise and vendor
- * harness differences, so a gap below 5 points is not treated as a real difference.
+ * harness differences; below 4 points a gap is treated as noise (user-set threshold).
  */
-export const MIN_SWITCH_POINTS = 5;
+export const MIN_SWITCH_POINTS = 4;
 /** Minimum saving (relative cost) before the user is interrupted to switch down. */
-export const MIN_SAVING = 0.5;
+export const MIN_SAVING = 0.25;
 
 export type PolicyResult =
   | { basis: 'benchmark'; benchmark: BenchmarkId; recommended: string; interrupt: boolean; reason: 'current-within-tolerance' | 'quality-gap' | 'saving' | 'gap-below-threshold';

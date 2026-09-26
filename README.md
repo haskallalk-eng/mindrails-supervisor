@@ -2,7 +2,7 @@
 
 ## Jev – die richtige KI-Modellwahl vor jeder Aufgabe (Claude Code & Codex)
 
-Jev ordnet jede neue Aufgabe ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und empfiehlt den passenden Effort (nur Stufen, die das Modell in der App wirklich hat). Jev hält eine Nachricht nur an, wenn ein anderes Modell **klar** besser ist (≥ 5 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 50 % günstiger** – sonst geht sie sofort durch.
+Jev ordnet jede neue Aufgabe ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und empfiehlt den passenden Effort (nur Stufen, die das Modell in der App wirklich hat). Jev hält eine Nachricht nur an, wenn ein anderes Modell **klar** besser ist (≥ 4 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 25 % günstiger** – sonst geht sie sofort durch.
 
 **Installieren (Claude Code):**
 

@@ -6,7 +6,7 @@
   "interface": {
     "displayName": "Jev Modellwahl",
     "shortDescription": "Model and effort recommendation before every task.",
-    "longDescription": "Type `#jev an` once in a conversation. Jev classifies each new task (coding, agentic, reasoning, research, simple; easy/normal/hard) and a fixed policy picks the model from published benchmarks. Messages pass immediately when the current model fits; a clear quality gap (5+ benchmark points) or a 50%+ saving holds the message once with a recommendation. Send it again to proceed. `#jev`, `#jev <task>`, `#jev? <question>`, `#jev aus`. Requires AI_GATEWAY_API_KEY (Vercel AI Gateway); chat excerpts are sent to Jev and may incur charges.",
+    "longDescription": "Type `#jev an` once in a conversation. Jev classifies each new task (coding, agentic, reasoning, research, simple; easy/normal/hard) and a fixed policy picks the model from published benchmarks. Messages pass immediately when the current model fits; a clear quality gap (4+ benchmark points) or a 25%+ saving holds the message once with a recommendation. Send it again to proceed. `#jev`, `#jev <task>`, `#jev? <question>`, `#jev aus`. Requires AI_GATEWAY_API_KEY (Vercel AI Gateway); chat excerpts are sent to Jev and may incur charges.",
     "developerName": "Mindrails",
     "category": "Productivity",
     "capabilities": []

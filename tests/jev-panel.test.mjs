@@ -304,15 +304,20 @@ test('benchmark policy: small gaps never switch, clear gaps and big savings do',
   const { decideModel, MIN_SWITCH_POINTS } = await import('../dist/model-policy.js');
   const claude = ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'];
   const codex = ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol'];
-  assert.equal(MIN_SWITCH_POINTS, 5);
+  assert.equal(MIN_SWITCH_POINTS, 4);
   // Coding on Fable 5.1: Opus 5.5 scores higher AND costs 60 % less -> switch.
   const f = decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-fable-5-1', candidates: claude });
   assert.deepEqual([f.recommended, f.interrupt], ['claude-opus-5-5', true]);
   // Coding on Opus 5.5: already best -> stay.
   assert.equal(decideModel({ kind: 'coding', difficulty: 'hard', current: 'claude-opus-5-5', candidates: claude }).interrupt, false);
-  // Codex coding on Sol (49.3) vs Astra (53.3): 4 points, below threshold -> stay even on hard tasks.
+  // Codex coding on Sol (49.3) vs Astra (53.3): exactly 4 points -> reaches the threshold, switch.
   const s = decideModel({ kind: 'coding', difficulty: 'hard', current: 'gpt-6-sol', candidates: codex });
-  assert.deepEqual([s.recommended, s.interrupt, s.reason], ['gpt-6-astra', false, 'gap-below-threshold']);
+  assert.deepEqual([s.recommended, s.interrupt, s.reason], ['gpt-6-astra', true, 'quality-gap']);
+  // Opus 5 (48.0) vs Fable 5.1 (50.3) on hard coding: 2.3 points -> below threshold, stay.
+  const u = decideModel({ kind: 'coding', difficulty: 'hard', current: 'claude-opus-5', candidates: ['claude-opus-5', 'claude-fable-5-1'] });
+  assert.deepEqual([u.recommended, u.interrupt, u.reason], ['claude-fable-5-1', false, 'gap-below-threshold']);
+  // Saving threshold 25 %: Sonnet 5 ($10) vs Haiku ($5) on a simple task saves 50 % -> switch.
+  assert.equal(decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-sonnet-5', candidates: claude }).interrupt, true);
   // Codex agentic on GPT-5.6-Sol (37.3) vs Astra (57.9): clear 20.6-point gap -> switch.
   const a = decideModel({ kind: 'agentic', difficulty: 'normal', current: 'gpt-5.6-sol', candidates: codex });
   assert.deepEqual([a.recommended, a.interrupt, a.reason, a.gap], ['gpt-6-astra', true, 'quality-gap', 20.6]);
