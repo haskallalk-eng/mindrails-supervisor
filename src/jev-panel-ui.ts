@@ -5,7 +5,7 @@ export const PANEL_HTML = String.raw`<!doctype html>
 <style>
 :root{--bg:#fbfbfa;--panel:#fff;--text:#1d1d1b;--muted:#6b6b66;--line:#e4e3de;--accent:#3a5bd9;--accent-soft:#e8edfc;--ok:#1f7a4a;--warn:#9a6200;--err:#b3261e;--code:#f3f2ee}
 @media (prefers-color-scheme:dark){:root{--bg:#161615;--panel:#1f1f1d;--text:#ecebe6;--muted:#9c9b95;--line:#33322f;--accent:#8ea4ff;--accent-soft:#252c47;--ok:#5fc48c;--warn:#e0a73a;--err:#ff8a80;--code:#2a2926}}
-*{box-sizing:border-box}html,body{margin:0;height:100%}
+[hidden]{display:none!important}*{box-sizing:border-box}html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
 header{padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:6px}
 .row{display:flex;gap:8px;align-items:center}.grow{flex:1;min-width:0}
@@ -41,7 +41,7 @@ textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 .yes{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
 </style></head><body>
 <header>
-  <div class="row"><h1>Jev</h1><div class="tabs"><button class="tab on" id="tabRun">Ausführen</button><button class="tab" id="tabAsk">Fragen</button></div><div class="grow"></div><span class="pill" id="status">verbinde …</span></div>
+  <div class="row"><h1>Jev</h1><div class="tabs"><button class="tab" id="tabAsk">Assistent</button><button class="tab on" id="tabRun">Ausführen</button></div><div class="grow"></div><span class="pill" id="status">verbinde …</span></div>
   <div class="row runOnly"><div class="grow title" id="title">–</div></div>
   <div class="row runOnly"><select id="threads" class="grow" aria-label="Gespräch"></select><button id="fork" hidden title="Verlauf in ein neues Gespräch kopieren und dort fortsetzen">Abzweig</button></div>
 </header>
@@ -51,11 +51,14 @@ textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
   <div class="row" style="margin-top:6px"><span class="hint grow" id="hint">Enter sendet · Umschalt+Enter neue Zeile</span><button id="stop" hidden>Stopp</button><button id="send" class="primary">Senden</button></div>
 </footer></div>
 <div class="view" id="ask" hidden><main>
-  <div class="sys">Jev liest den gewählten Chat und bewertet ihn. Jev schreibt keinen Freitext: Er beantwortet feste Fragen (Fortschritt, Hindernis, nächster Schritt) und deine Ja/Nein-Frage mit Wahrscheinlichkeiten. Es wird nichts ausgeführt.</div>
-  <label class="field">Chat<select id="source"></select></label>
-  <label class="field">Deine Ja/Nein-Frage (optional)<input id="question" maxlength="500" placeholder="z. B. Sind die Tests am Ende grün?"></label>
-  <div class="row"><span class="hint grow">Ein Jev-Aufruf pro Klick, kann Kosten verursachen.</span><button id="askBtn" class="primary">Jev fragen</button></div>
-  <div id="answer" style="display:flex;flex-direction:column;gap:10px"></div>
+  <div class="card"><div class="row"><div class="grow"><div class="note" style="margin:0">Aktueller Chat (zuletzt aktiv)</div><div id="curTitle" style="font-weight:600">–</div><div class="note" style="margin:0" id="curMeta"></div></div><button id="analyzeBtn" class="primary">Analysieren</button></div>
+    <details style="margin-top:6px"><summary>anderen Chat wählen</summary><select id="source" style="width:100%;margin-top:4px"></select></details></div>
+  <div id="analysis" style="display:flex;flex-direction:column;gap:8px"></div>
+  <label class="field">Nächste Aufgabe – Jev schlägt das Modell vor (nichts wird ausgeführt)<textarea id="task" style="min-height:70px" placeholder="Was soll als Nächstes passieren?"></textarea></label>
+  <label class="field">Ja/Nein-Frage an Jev (optional)<input id="question" maxlength="500" placeholder="z. B. Sind die Tests am Ende grün?"></label>
+  <div class="row"><label class="hint grow"><input type="checkbox" id="auto"> automatisch analysieren, wenn der Chat fertig ist</label><button id="suggestBtn" class="primary">Modell vorschlagen</button></div>
+  <div id="answer" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div class="hint">Jev antwortet mit Wahrscheinlichkeiten, nicht mit Freitext. Jeder Lauf ist ein Jev-Aufruf (~5.000 Tokens aus deinem Budget). „Aktueller Chat“ = der zuletzt aktualisierte Claude-Code- oder Codex-Chat; welches Fenster du gerade ansiehst, kann das Seitenfeld nicht erkennen.</div>
 </main></div>
 <script>
 const token=new URLSearchParams(location.search).get('t')||'';
@@ -133,25 +136,50 @@ function connect(){
   es.onmessage=m=>{try{handle(JSON.parse(m.data));}catch{}};
   es.onerror=()=>{setStatus('Verbindung getrennt','err');es.close();setTimeout(connect,2000);};
 }
-let labels=null;
-function showView(ask){$('run').hidden=ask;$('ask').hidden=!ask;$('tabRun').classList.toggle('on',!ask);$('tabAsk').classList.toggle('on',ask);document.querySelectorAll('.runOnly').forEach(n=>n.hidden=ask);if(ask&&!$('source').options.length)loadSources();try{localStorage.setItem('jevTab',ask?'ask':'run')}catch{}}
+let labels=null,cur=null,picked=null,lastAutoFor=0,lastAutoAt=0,seenUpdate=0,stableSince=0;
+function showView(ask){$('run').hidden=ask;$('ask').hidden=!ask;$('tabRun').classList.toggle('on',!ask);$('tabAsk').classList.toggle('on',ask);document.querySelectorAll('.runOnly').forEach(n=>n.hidden=ask);if(ask){refreshCurrent();if(!$('source').options.length)loadSources();}try{localStorage.setItem('jevTab',ask?'ask':'run')}catch{}}
 $('tabRun').onclick=()=>showView(false);$('tabAsk').onclick=()=>showView(true);
-async function loadSources(){const sel=$('source');sel.textContent='';sel.appendChild(el('option',null,'lade …'));
-  try{const s=await api('/api/sources');labels=s.labels;sel.textContent='';
-    for(const [name,list] of [['Claude Code',s.claude],['Codex',s.codex]]){const g=document.createElement('optgroup');g.label=name;for(const c of list){const o=el('option',null,c.title.slice(0,70)+' · '+new Date(c.updatedAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));o.value=c.kind+':'+c.id;g.appendChild(o);}sel.appendChild(g);}
-  }catch(e){sel.textContent='';sel.appendChild(el('option',null,'Chats nicht lesbar: '+e.message));}}
-function judgmentCard(title,j,map){const c=el('div','card');c.appendChild(el('div','head',title+': '+(map[j.choice]||j.choice)));
-  for(const [k,p] of Object.entries(j.probabilities).sort((a,b)=>b[1]-a[1]).slice(0,3)){const r=el('div','bar'+(k===j.choice?' win':''));r.style.gridTemplateColumns='150px 1fr 48px';r.appendChild(el('span',null,map[k]||k));const t=el('div','track'),f=el('div','fill');f.style.width=(p*100).toFixed(1)+'%';t.appendChild(f);r.appendChild(t);r.appendChild(el('span',null,(p*100).toFixed(0)+' %'));c.appendChild(r);}
-  return c;}
-$('askBtn').onclick=async()=>{const v=$('source').value;if(!v||!v.includes(':'))return;const [kind,id]=v.split(':');const out=$('answer');out.textContent='';const btn=$('askBtn');btn.disabled=true;setStatus('Jev liest den Chat …','run');
-  try{const r=await api('/api/inspect',{kind,id,question:$('question').value||null});
-    if(r.description)out.appendChild(el('div','sys','Gelesen: '+r.description));
+const ago=ms=>{const s=Math.max(0,Math.round(ms/1000));return s<60?'vor '+s+' s':s<3600?'vor '+Math.round(s/60)+' min':'vor '+Math.round(s/3600)+' h';};
+const target=()=>picked||cur;
+function showTarget(){const t=target();$('curTitle').textContent=t?t.title:'kein Chat gefunden';$('curMeta').textContent=t?(t.kind==='claude'?'Claude Code':'Codex')+(t.updatedAt?' · '+ago(Date.now()-t.updatedAt):'')+(picked?' · manuell gewählt':''):'';}
+async function refreshCurrent(){try{const r=await api('/api/current');const c=r.current;
+  if(c&&cur&&c.id===cur.id&&c.updatedAt!==cur.updatedAt){seenUpdate=c.updatedAt;stableSince=Date.now();}
+  cur=c;showTarget();
+  // Auto mode: analyze once the current chat stopped changing for 20 s after an update, at most every 2 minutes.
+  if($('auto').checked&&!picked&&cur&&seenUpdate===cur.updatedAt&&Date.now()-stableSince>20000&&lastAutoFor!==seenUpdate&&Date.now()-lastAutoAt>120000){lastAutoFor=seenUpdate;lastAutoAt=Date.now();run(false,true);}
+}catch{}}
+setInterval(()=>{if(!$('ask').hidden)refreshCurrent();},8000);
+async function loadSources(){const sel=$('source');sel.textContent='';const def=el('option',null,'– zuletzt aktiver Chat –');def.value='';sel.appendChild(def);
+  try{const s=await api('/api/sources');labels=s.labels;
+    for(const [name,list] of [['Claude Code',s.claude],['Codex',s.codex]]){const g=document.createElement('optgroup');g.label=name;for(const c of list){const o=el('option',null,c.title.slice(0,70)+' · '+new Date(c.updatedAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));o.value=c.kind+':'+c.id;o.dataset.title=c.title;o.dataset.updated=c.updatedAt;g.appendChild(o);}sel.appendChild(g);}
+  }catch(e){sel.appendChild(el('option',null,'Chats nicht lesbar: '+e.message));}}
+$('source').onchange=()=>{const o=$('source').selectedOptions[0];if(!o||!o.value){picked=null;}else{const [kind,id]=o.value.split(':');picked={kind,id,title:o.dataset.title,updatedAt:Number(o.dataset.updated)};}showTarget();};
+function bars(j,map,limit=3){const c=el('div');for(const [k,p] of Object.entries(j.probabilities).sort((a,b)=>b[1]-a[1]).slice(0,limit)){const r=el('div','bar'+(k===j.choice?' win':''));r.style.gridTemplateColumns='140px 1fr 44px';r.appendChild(el('span',null,map[k]||k));const t=el('div','track'),f=el('div','fill');f.style.width=(p*100).toFixed(1)+'%';t.appendChild(f);r.appendChild(t);r.appendChild(el('span',null,(p*100).toFixed(0)+' %'));c.appendChild(r);}return c;}
+async function run(withTask,auto){
+  const t=target();if(!t)return;if(!labels)await loadSources();
+  const out=withTask?$('answer'):$('analysis');out.textContent='';
+  $('analyzeBtn').disabled=$('suggestBtn').disabled=true;setStatus(auto?'Jev analysiert automatisch …':'Jev liest den Chat …','run');
+  try{const r=await api('/api/inspect',{kind:t.kind,id:t.id,question:withTask?($('question').value||null):null,task:withTask?($('task').value||null):null});
     if(!r.ok){out.appendChild(el('div','sys err','Jev konnte nicht antworten ('+r.reason+'). Keine Werte erfunden, kein Neuversuch.'));}
-    else{if(r.question){const c=el('div','card');c.appendChild(el('div','head','„'+r.question.text+'“'));c.appendChild(el('div','yes',(r.question.yes*100).toFixed(0)+' % ja'));c.appendChild(el('div','note',r.question.yes>0.65?'Jev hält „ja“ für wahrscheinlich.':r.question.yes<0.35?'Jev hält „nein“ für wahrscheinlich.':'Jev ist unsicher – der Chat zeigt es nicht eindeutig.'));out.appendChild(c);}
-      out.appendChild(judgmentCard('Fortschritt',r.progress,labels.progress));out.appendChild(judgmentCard('Hindernis',r.blocker,labels.blocker));out.appendChild(judgmentCard('Nächster Schritt',r.next_step,labels.next_step));
-      out.appendChild(el('div','note','Jev-Einschätzungen sind Wahrscheinlichkeiten, keine geprüften Fakten. Verbrauch: '+r.usage.input_tokens+' Eingabe-Tokens.'));}
-  }catch(e){out.appendChild(el('div','sys err',e.status===409?'Es läuft bereits eine Jev-Frage.':'Fehler: '+e.message));}
-  btn.disabled=false;setStatus(busy?'arbeitet …':'Bereit',busy?'run':'');};
-try{if(localStorage.getItem('jevTab')==='ask')showView(true)}catch{}
+    else{
+      const L=labels;const c=el('div','card');
+      c.appendChild(el('div','head',(auto?'Automatisch · ':'')+(L.progress[r.progress.choice]||r.progress.choice)+' · Hindernis: '+(L.blocker[r.blocker.choice]||r.blocker.choice)+' · Nächster Schritt: '+(L.next_step[r.next_step.choice]||r.next_step.choice)));
+      const d=el('details');d.appendChild(el('summary',null,'Wahrscheinlichkeiten'));
+      for(const [name,j,map] of [['Fortschritt',r.progress,L.progress],['Hindernis',r.blocker,L.blocker],['Nächster Schritt',r.next_step,L.next_step]]){d.appendChild(el('div','note',name));d.appendChild(bars(j,map));}
+      c.appendChild(d);c.appendChild(el('div','note',r.description+' · '+r.usage.input_tokens+' Tokens'));out.appendChild(c);
+      if(r.nextModel&&r.models){const m=el('div','card');const names=Object.fromEntries(r.models.map(x=>[x.id,x.label]));
+        m.appendChild(el('div','head','Empfehlung für die nächste Aufgabe: '+names[r.nextModel.choice]+' ('+(r.nextModel.probabilities[r.nextModel.choice]*100).toFixed(0)+' %)'));
+        m.appendChild(bars(r.nextModel,names,4));
+        m.appendChild(el('div','note',t.kind==='claude'?'Stelle das Modell im Claude-Chat um und füge die Aufgabe ein. Relative Eignung laut Jev, keine Erfolgsgarantie.':'Stelle das Modell in Codex um oder nutze den Tab „Ausführen“, der es automatisch setzt.'));
+        const cp=el('button',null,'Aufgabe kopieren');cp.onclick=async()=>{try{await navigator.clipboard.writeText($('task').value);cp.textContent='kopiert ✓';}catch{cp.textContent='Kopieren nicht erlaubt';}};m.appendChild(cp);out.appendChild(m);}
+      if(r.question){const q=el('div','card');q.appendChild(el('div','head','„'+r.question.text+'“: '+(r.question.yes*100).toFixed(0)+' % ja'));q.appendChild(el('div','note',r.question.yes>0.65?'Jev hält „ja“ für wahrscheinlich.':r.question.yes<0.35?'Jev hält „nein“ für wahrscheinlich.':'Unklar – der Chat zeigt es nicht eindeutig.'));out.appendChild(q);}
+    }
+  }catch(e){out.appendChild(el('div','sys err',e.status===409?'Es läuft bereits eine Jev-Anfrage.':'Fehler: '+e.message));}
+  $('analyzeBtn').disabled=$('suggestBtn').disabled=false;setStatus(busy?'arbeitet …':'Bereit',busy?'run':'');}
+$('analyzeBtn').onclick=()=>run(false,false);
+$('suggestBtn').onclick=()=>{if(!$('task').value.trim()&&!$('question').value.trim()){$('task').focus();return;}run(true,false);};
+try{$('auto').checked=localStorage.getItem('jevAuto')==='1'}catch{}
+$('auto').onchange=()=>{try{localStorage.setItem('jevAuto',$('auto').checked?'1':'0')}catch{}};
+try{showView(localStorage.getItem('jevTab')!=='run')}catch{showView(true)}
 api('/api/state').then(s=>{threadId=s.threadId;$('title').textContent=s.title||(s.threadId?s.threadId:'Neues Gespräch')+' · '+s.cwd;$('hint').textContent=(s.write?'Projektänderungen erlaubt':'Nur lesen (neue Gespräche)')+' · Enter sendet · Umschalt+Enter neue Zeile';setBusy(s.busy);loadThreads();connect();}).catch(()=>{setStatus('Kein Zugriff','err');sys('Token fehlt oder ist ungültig. Öffne die vom Startbefehl ausgegebene Adresse.','err');});
 </script></body></html>`;

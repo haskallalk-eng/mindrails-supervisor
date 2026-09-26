@@ -40,7 +40,7 @@ function recentView(turn: HistoryTurn, index: number, cap: number) {
   return {
     turn: index + 1, status: turn.status, ...(turn.error ? { error: clip(turn.error, 400) } : {}),
     user: clip(user, cap), assistant: clip(agent, cap),
-    ...(commands.length ? { commands: commands.length, failedCommands: failed.slice(-5).map(c => ({ command: clip(c.command, 160), exitCode: c.exitCode })) } : {}),
+    ...(commands.length ? { commands: commands.length, lastCommands: commands.slice(-5).map(c => ({ command: clip(c.command.replace(/\s+/g, ' '), 140), status: c.status })), failedCommands: failed.slice(-5).map(c => ({ command: clip(c.command, 160), exitCode: c.exitCode })) } : {}),
     ...(files.length ? { changedFiles: files.slice(0, 20) } : {}),
   };
 }

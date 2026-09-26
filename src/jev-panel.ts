@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { CodexAppServer, resolveCodexBinary } from './codex-app-server.js';
 import { JevPanelSession, isThreadId, type PanelEvent } from './jev-panel-session.js';
 import { PANEL_HTML } from './jev-panel-ui.js';
-import { findClaudeSession, inspectChat, inspectLabels, listClaudeSessions, readClaudeSession } from './chat-inspect.js';
+import { CLAUDE_MODELS, findClaudeSession, inspectChat, inspectLabels, listClaudeSessions, readClaudeSession, type ModelOption } from './chat-inspect.js';
 import { gatewayKey } from './jev.js';
 import type { routeModel } from './model-router.js';
 import { describeContext } from './routing-context.js';
@@ -107,6 +107,15 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
         const codex = await readOnly(s => s.call('thread/list', { limit: 30, sortKey: 'updated_at', useStateDbOnly: true }));
         return json(res, 200, { labels: inspectLabels, claude: listClaudeSessions(), codex: (codex.data ?? []).map((t: any) => ({ kind: 'codex', id: t.id, title: t.name || String(t.preview ?? '').slice(0, 80) || t.id, updatedAt: (t.updatedAt ?? 0) * 1000, cwd: t.cwd })) });
       }
+      if (req.method === 'GET' && url.pathname === '/api/current') {
+        // The panel cannot see which chat window is focused; the most recently updated chat is the best available signal.
+        const [claude] = listClaudeSessions(undefined, 1);
+        const codexList = await readOnly(s => s.call('thread/list', { limit: 1, sortKey: 'updated_at', useStateDbOnly: true })).catch(() => ({ data: [] }));
+        const t = codexList.data?.[0];
+        const codex = t ? { kind: 'codex', id: t.id, title: t.name || String(t.preview ?? '').slice(0, 80) || t.id, updatedAt: (t.updatedAt ?? 0) * 1000 } : null;
+        const current = [claude, codex].filter(Boolean).sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0] ?? null;
+        return json(res, 200, { current, now: Date.now() });
+      }
       if (req.method !== 'POST') return json(res, 405, { error: 'METHOD' });
       if (req.headers['content-type'] !== 'application/json') return json(res, 415, { error: 'CONTENT_TYPE' });
       const input = await body(req);
@@ -120,15 +129,17 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
         return json(res, 202, { accepted: true });
       }
       if (url.pathname === '/api/inspect') {
-        if (!isThreadId(input.id) || !['claude', 'codex'].includes(input.kind) || (input.question != null && typeof input.question !== 'string')) return json(res, 400, { error: 'INVALID' });
+        if (!isThreadId(input.id) || !['claude', 'codex'].includes(input.kind) || (input.question != null && typeof input.question !== 'string') || (input.task != null && typeof input.task !== 'string')) return json(res, 400, { error: 'INVALID' });
         if (inspecting) return json(res, 409, { error: 'BUSY' });
         inspecting = true;
         try {
           let turns, olderUnread = false;
           if (input.kind === 'claude') { const path = findClaudeSession(input.id); if (!path) return json(res, 404, { error: 'CHAT_NOT_FOUND' }); turns = readClaudeSession(path); }
           else ({ turns, olderUnread } = await readOnly(s => s.readHistory(input.id)));
-          const result = await (o.inspect ?? inspectChat)({ turns, olderUnread, question: input.question ?? undefined, key: (o.key ?? gatewayKey)(), source: input.kind === 'claude' ? 'Claude Code session' : 'Codex conversation' });
-          return json(res, 200, { ...result, description: result.stats ? describeContext(result.stats) : null });
+          let models: ModelOption[] | undefined;
+          if (input.task) models = input.kind === 'claude' ? CLAUDE_MODELS : (await readOnly(s => s.listModels())).map(m => ({ id: m.model, label: m.model.replace('gpt-6-', '').replace(/^./, c => c.toUpperCase()), description: m.description }));
+          const result = await (o.inspect ?? inspectChat)({ turns, olderUnread, question: input.question ?? undefined, task: input.task ?? undefined, models, key: (o.key ?? gatewayKey)(), source: input.kind === 'claude' ? 'Claude Code session' : 'Codex conversation' });
+          return json(res, 200, { ...result, description: result.stats ? describeContext(result.stats) : null, models: models ?? null });
         } finally { inspecting = false; }
       }
       if (url.pathname === '/api/approval') return json(res, session.resolveApproval(String(input.requestId), input.decision === 'accept' ? 'accept' : 'decline') ? 200 : 404, {});
