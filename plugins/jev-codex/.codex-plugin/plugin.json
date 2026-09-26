@@ -1,6 +1,6 @@
 {
   "name": "jev",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Jev picks the right GPT model and reasoning effort for every Codex task, from published benchmarks.",
   "author": { "name": "Mindrails" },
   "interface": {
