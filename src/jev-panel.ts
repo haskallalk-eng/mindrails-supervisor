@@ -147,7 +147,7 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
           if (input.kind === 'claude') { const path = findClaudeSession(input.id); if (!path) return json(res, 404, { error: 'CHAT_NOT_FOUND' }); turns = readClaudeSession(path); }
           else ({ turns, olderUnread } = await readOnly(s => s.readHistory(input.id)));
           let models: ModelOption[] | undefined;
-          if (input.task) models = input.kind === 'claude' ? CLAUDE_MODELS : (await readOnly(s => s.listModels())).map(m => ({ id: m.model, label: m.model.replace('gpt-6-', '').replace(/^./, c => c.toUpperCase()), description: m.description }));
+          if (input.task) models = input.kind === 'claude' ? CLAUDE_MODELS.map(m => ({ id: m.id, label: `${m.label}: ${(m as any).members}`, description: m.description })) : (await readOnly(s => s.listModels())).map(m => ({ id: m.model, label: m.model.replace('gpt-6-', '').replace(/^./, c => c.toUpperCase()), description: m.description }));
           const result = await (o.inspect ?? inspectChat)({ turns, olderUnread, question: input.question ?? undefined, task: input.task ?? undefined, models, efforts: input.task && input.kind === 'claude' ? EFFORTS : undefined, key: (o.key ?? gatewayKey)(), source: input.kind === 'claude' ? 'Claude Code session' : 'Codex conversation' });
           return json(res, 200, { ...result, description: result.stats ? describeContext(result.stats) : null, models: models ?? null, efforts: input.task && input.kind === 'claude' ? EFFORTS : null });
         } finally { inspecting = false; }

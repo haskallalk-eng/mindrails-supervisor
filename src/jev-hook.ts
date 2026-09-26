@@ -10,7 +10,8 @@ import { mkdirSync, writeFileSync, renameSync, readFileSync, openSync, readSync,
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { CLAUDE_MODELS, EFFORTS, inspectChat, inspectLabels, readClaudeSession, type InspectResult } from './chat-inspect.js';
+import { CLAUDE_TIERS, CLAUDE_MODELS, EFFORTS, guardDecision, inspectChat, inspectLabels, modelDisplay, readClaudeSession, tierOf, type InspectResult } from './chat-inspect.js';
+import { homedir } from 'node:os';
 import { describeContext } from './routing-context.js';
 
 export type Focus = { kind: 'claude' | 'codex'; id: string; at: number; cwd?: string | null };
@@ -37,9 +38,9 @@ export function setGuard(stateDir: string, session: string, enabled: boolean) {
   if (enabled) sessions[session] = true; else delete sessions[session];
   writeJson(file, { sessions });
 }
-/** True when the recommended model is the one the chat already uses. */
+/** True when the recommended tier is the tier the chat already uses. */
 export function sameModel(current: string | null, recommended: string): boolean {
-  return Boolean(current) && modelLabel(current) === modelLabel(recommended);
+  const t = tierOf(current); return Boolean(t) && (t!.id === recommended || t!.id === tierOf(recommended)?.id);
 }
 
 export type JevCommand = { kind: 'analyze'; task?: string } | { kind: 'question'; question?: string } | { kind: 'guard'; enabled: boolean } | { kind: 'help' };
@@ -65,11 +66,12 @@ export function currentModel(transcriptPath: string): string | null {
   } catch { return null; }
 }
 
-const modelLabel = (id: string | null) => {
-  if (!id) return null;
-  const known = CLAUDE_MODELS.find(m => id === m.id || id.startsWith(m.id.replace(/-\d{8}$/, '')));
-  return known?.label ?? id;
-};
+const modelLabel = (id: string | null) => id ? modelDisplay(id) : null;
+const tierLabel = (id: string) => { const t = CLAUDE_TIERS.find(x => x.id === id); return t ? `${t.label} (${modelDisplay(t.defaultModel)})` : id; };
+/** Current model from the transcript, else the model configured in Claude Code settings. */
+export function effectiveModel(transcriptPath: string, settingsPath = join(homedir(), '.claude', 'settings.json')): string | null {
+  return currentModel(transcriptPath) ?? (typeof readJson(settingsPath)?.model === 'string' ? readJson(settingsPath).model : null);
+}
 const pct = (p: number | undefined) => `${Math.round((p ?? 0) * 100)} %`;
 const ranked = (probs: Record<string, number>, label: (id: string) => string, n = 4) =>
   Object.entries(probs).sort((a, b) => b[1] - a[1]).slice(0, n).map(([id, p]) => `${label(id)} ${pct(p)}`).join(' · ');
@@ -87,14 +89,16 @@ export function formatResult(r: InspectResult, description: string | null, opts:
   const L = inspectLabels as Record<string, Record<string, string>>;
   const lines: string[] = [];
   if (r.nextModel) {
-    const mLabel = (id: string) => CLAUDE_MODELS.find(m => m.id === id)?.label ?? id;
+    const mLabel = tierLabel;
     const eLabel = (id: string) => EFFORTS.find(e => e.id === id)?.label ?? id;
     lines.push(opts.guard ? 'Jev-Wächter – Empfehlung für diese Nachricht' : 'Jev – Empfehlung für die Aufgabe');
-    lines.push(`  Modell:  ${mLabel(r.nextModel.choice)}   (${ranked(r.nextModel.probabilities, mLabel)})`);
+    const tier = CLAUDE_TIERS.find(t => t.id === r.nextModel!.choice);
+    lines.push(`  Stufe:   ${mLabel(r.nextModel.choice)}   (${ranked(r.nextModel.probabilities, id => CLAUDE_TIERS.find(t => t.id === id)?.label ?? id)})`);
+    if (tier) lines.push(`           gleichwertig: ${tier.members}`);
     if (r.effort) lines.push(`  Effort:  ${eLabel(r.effort.choice)}   (${ranked(r.effort.probabilities, eLabel, 3)})`);
     if (opts.current) {
-      const same = modelLabel(opts.current) === mLabel(r.nextModel.choice);
-      lines.push(`  Aktuell: ${modelLabel(opts.current)}${same ? ' – passt bereits' : ''}`);
+      const same = sameModel(opts.current, r.nextModel.choice);
+      lines.push(`  Aktuell: ${modelLabel(opts.current)} (Stufe ${tierOf(opts.current)?.label ?? 'unbekannt'})${same ? ' – passt bereits' : ''}`);
     }
   }
   lines.push(`  Chat:    ${L.progress![r.progress.choice] ?? r.progress.choice} · Hindernis: ${L.blocker![r.blocker.choice] ?? r.blocker.choice} · nächster Schritt: ${L.next_step![r.next_step.choice] ?? r.next_step.choice}`);
@@ -135,7 +139,7 @@ async function main() {
     }
     try {
       const r = await runJev(event, command.kind === 'question' ? { question: command.question } : { task: command.task });
-      return block(formatResult(r, r.stats ? describeContext(r.stats) : null, { current: currentModel(String(event.transcript_path)) }));
+      return block(formatResult(r, r.stats ? describeContext(r.stats) : null, { current: effectiveModel(String(event.transcript_path)) }));
     } catch (e) { return block(`Jev konnte den Chat nicht lesen (${e instanceof Error ? e.message : 'Fehler'}).`); }
   }
 
@@ -148,10 +152,14 @@ async function main() {
   try {
     const r = await runJev(event, { task: prompt });
     if (!r.ok) { process.stdout.write(JSON.stringify({ systemMessage: `Jev-Wächter: keine Empfehlung (${r.reason}) – Nachricht wurde normal gesendet.` }) + '\n'); return; }
-    const current = currentModel(String(event.transcript_path));
-    if (r.nextModel && sameModel(current, r.nextModel.choice)) {
+    const current = effectiveModel(String(event.transcript_path));
+    const decision = r.nextModel ? guardDecision(current, r.nextModel) : null;
+    if (decision && !decision.interrupt) {
       const effort = r.effort ? EFFORTS.find(e => e.id === r.effort!.choice)?.label : null;
-      process.stdout.write(JSON.stringify({ systemMessage: `Jev: ${modelLabel(current)} passt (${pct(r.nextModel.probabilities[r.nextModel.choice])})${effort ? ` · Effort-Tipp: ${effort}` : ''} – Nachricht gesendet.` }) + '\n');
+      const why = decision.reason === 'same-tier' ? `${modelLabel(current)} passt (Stufe ${decision.current!.label})`
+        : decision.reason === 'unclear' ? `Jev tendiert zu ${decision.recommended.label}, aber nicht deutlich genug – ${modelLabel(current)} bleibt`
+        : `aktuelles Modell unbekannt – Jev empfiehlt Stufe ${decision.recommended.label}`;
+      process.stdout.write(JSON.stringify({ systemMessage: `Jev: ${why}${effort ? ` · Effort-Tipp: ${effort}` : ''} – Nachricht gesendet.` }) + '\n');
       return;
     }
     writeJson(pendingFile, { hash, at: Date.now() });

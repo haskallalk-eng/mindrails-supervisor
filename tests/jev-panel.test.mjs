@@ -275,20 +275,41 @@ test('guard is per chat and passes immediately when Jev recommends the current m
   setGuard(dir, a, true);
   assert.equal(guardEnabled(dir, a), true); assert.equal(guardEnabled(dir, b), false);
   setGuard(dir, a, false); assert.equal(guardEnabled(dir, a), false);
-  assert.equal(sameModel('claude-opus-5-5', 'claude-opus-5-5'), true);
-  assert.equal(sameModel('claude-haiku-4-5-20251001', 'claude-haiku-4-5-20251001'), true);
-  assert.equal(sameModel('claude-opus-5-5', 'claude-sonnet-5'), false);
-  assert.equal(sameModel(null, 'claude-sonnet-5'), false);
+  assert.equal(sameModel('claude-opus-4-7', 'tier-strong'), true);
+  assert.equal(sameModel('claude-haiku-4-5-20251001', 'tier-fast'), true);
+  assert.equal(sameModel('claude-opus-5-5', 'tier-everyday'), false);
+  assert.equal(sameModel(null, 'tier-everyday'), false);
 });
 
-test('guard formatting shows model, effort, current model and how to continue', async () => {
+test('guard formatting shows tier, equivalent models, effort, current model and how to continue', async () => {
   const { formatResult } = await import('../dist/jev-hook.js');
   const j = (choice, probabilities) => ({ choice, confidence: 1, probabilities });
   const text = formatResult({ ok: true, progress: j('advancing', { advancing: 1 }), blocker: j('none', { none: 1 }), next_step: j('continue', { continue: 1 }), question: null,
-    nextModel: j('claude-sonnet-5', { 'claude-sonnet-5': 0.7, 'claude-opus-5-5': 0.2, 'claude-fable-5-1': 0.05, 'claude-haiku-4-5-20251001': 0.05 }),
-    effort: j('medium', { medium: 0.6, high: 0.3, low: 0.1, xhigh: 0, max: 0 }), stats: { mode: 'complete' }, usage: { input_tokens: 5, output_tokens: 1 } }, 'x', { current: 'claude-opus-5-5', guard: true });
-  assert.match(text, /Modell:  Sonnet 5 .*Sonnet 5 70 % · Opus 5.5 20 %/);
+    nextModel: j('tier-everyday', { 'tier-everyday': 0.7, 'tier-strong': 0.2, 'tier-top': 0.05, 'tier-fast': 0.05 }),
+    effort: j('medium', { medium: 0.6, high: 0.3, low: 0.1, xhigh: 0, max: 0 }), stats: { mode: 'complete' }, usage: { input_tokens: 5, output_tokens: 1 } }, 'x', { current: 'claude-opus-4-7', guard: true });
+  assert.match(text, /Stufe:   Alltag \(Sonnet 5\) .*Alltag 70 % · Stark 20 %/);
+  assert.match(text, /gleichwertig: Sonnet 5, Sonnet 4.6/);
   assert.match(text, /Effort:  mittel .*mittel 60 %/);
-  assert.match(text, /Aktuell: Opus 5.5\n/);
+  assert.match(text, /Aktuell: Opus 4.7 \(Stufe Stark\)\n/);
   assert.match(text, /dieselbe Nachricht nochmal senden/);
+});
+
+test('guard threshold: never within a tier, only for a clear tier difference', async () => {
+  const { guardDecision } = await import('../dist/chat-inspect.js');
+  const p = (top, strong, everyday, fast) => ({ probabilities: { 'tier-top': top, 'tier-strong': strong, 'tier-everyday': everyday, 'tier-fast': fast } });
+  // Opus 4.6 vs 4.7 vs 5.5: same tier, no interruption even at 100 %.
+  assert.equal(guardDecision('claude-opus-4-6', p(0, 1, 0, 0)).reason, 'same-tier');
+  assert.equal(guardDecision('claude-opus-4-6', p(0, 1, 0, 0)).interrupt, false);
+  // Clear downgrade Opus -> Haiku.
+  assert.deepEqual([guardDecision('claude-opus-5-5', p(0, 0.1, 0.1, 0.8)).interrupt, guardDecision('claude-opus-5-5', p(0, 0.1, 0.1, 0.8)).recommended.label], [true, 'Schnell']);
+  // Clear upgrade Sonnet -> Fable.
+  assert.equal(guardDecision('claude-sonnet-5', p(0.7, 0.2, 0.1, 0)).interrupt, true);
+  // Leaning but not clear: top below 50 % or margin below 25 points.
+  assert.equal(guardDecision('claude-opus-5-5', p(0, 0.3, 0.45, 0.25)).reason, 'unclear');
+  assert.equal(guardDecision('claude-opus-5-5', p(0, 0.35, 0.55, 0.1)).reason, 'unclear');
+  assert.equal(guardDecision('claude-opus-5-5', p(0, 0.25, 0.6, 0.15)).interrupt, true);
+  // Unknown current model: never interrupt.
+  assert.equal(guardDecision(null, p(0, 0, 0, 1)).reason, 'unknown-current');
+  // Settings aliases are understood.
+  assert.equal(guardDecision('fable[1m]', p(1, 0, 0, 0)).reason, 'same-tier');
 });

@@ -11,14 +11,42 @@ import { buildRoutingContext, type ContextStats, type HistoryItem, type HistoryT
 
 export type ChatSource = { kind: 'claude' | 'codex'; id: string; title: string; updatedAt: number; cwd?: string | null };
 export type ModelOption = { id: string; label: string; description: string };
-// Advisory only: the user switches the model in the Claude app. Prices per 1M
-// input/output tokens (API list prices) are included so Jev can weigh cost.
-export const CLAUDE_MODELS: ModelOption[] = [
-  { id: 'claude-fable-5-1', label: 'Fable 5.1', description: 'Most capable and most expensive ($10/$50): only for the most demanding reasoning and long-horizon agentic work where a stronger model clearly pays off.' },
-  { id: 'claude-opus-5-5', label: 'Opus 5.5', description: 'Very capable ($4/$20): hard reasoning, ambiguous architecture, subtle debugging, security-sensitive or costly-mistake work, long multi-step coding.' },
-  { id: 'claude-sonnet-5', label: 'Sonnet 5', description: 'Strong everyday coding ($2/$10): normal implementation, refactoring, tests, reviews and documentation with clear requirements.' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest and cheapest ($1/$5): simple, bounded, low-risk tasks such as small edits, lookups, renames, formatting or short answers.' },
+// Jev decides the capability TIER, not an individual model: versions within a
+// tier (e.g. Opus 4.6 vs 4.7) rarely matter enough to interrupt the user.
+// Advisory only: the user switches the model in the Claude app.
+export type ClaudeTier = ModelOption & { rank: number; family: RegExp; defaultModel: string; members: string };
+export const CLAUDE_TIERS: ClaudeTier[] = [
+  { id: 'tier-top', label: 'Spitze', rank: 4, family: /fable|mythos/i, defaultModel: 'claude-fable-5-1', members: 'Fable 5.1, Fable 5',
+    description: 'Most capable and most expensive tier ($10/$50 per 1M tokens: Fable 5.1, Fable 5): only for the most demanding reasoning and long-horizon agentic work where the strongest model clearly pays off.' },
+  { id: 'tier-strong', label: 'Stark', rank: 3, family: /opus/i, defaultModel: 'claude-opus-5-5', members: 'Opus 5.5, Opus 5, Opus 4.8, 4.7, 4.6',
+    description: 'Strong tier ($4-5/$20-25: Opus 5.5, Opus 5, Opus 4.x): hard reasoning, ambiguous architecture, subtle debugging, security-sensitive or costly-mistake work, long multi-step coding.' },
+  { id: 'tier-everyday', label: 'Alltag', rank: 2, family: /sonnet/i, defaultModel: 'claude-sonnet-5', members: 'Sonnet 5, Sonnet 4.6',
+    description: 'Everyday tier ($2-3/$10-15: Sonnet 5, Sonnet 4.6): normal implementation, refactoring, tests, reviews and documentation with clear requirements.' },
+  { id: 'tier-fast', label: 'Schnell', rank: 1, family: /haiku/i, defaultModel: 'claude-haiku-4-5-20251001', members: 'Haiku 4.5',
+    description: 'Fast tier ($1/$5: Haiku 4.5): simple, bounded, low-risk tasks such as small edits, lookups, renames, formatting or short answers.' },
 ];
+export const CLAUDE_MODELS: ModelOption[] = CLAUDE_TIERS;
+export const tierOf = (model: string | null | undefined): ClaudeTier | null => model ? CLAUDE_TIERS.find(t => t.family.test(model)) ?? null : null;
+/** "claude-opus-4-7" -> "Opus 4.7", "fable[1m]" -> "Fable". */
+export function modelDisplay(model: string): string {
+  const m = /(fable|mythos|opus|sonnet|haiku)(?:-(\d+)(?:-(\d{1,2}))?)?/i.exec(model);
+  if (!m) return model;
+  const name = m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1).toLowerCase();
+  return [name, m[2] ? (m[3] ? `${m[2]}.${m[3]}` : m[2]) : ''].filter(Boolean).join(' ');
+}
+
+/** Interrupt only for a clear, tier-level difference. */
+export const GUARD_MIN_TOP = 0.5, GUARD_MIN_MARGIN = 0.25;
+export function guardDecision(current: string | null, nextModel: { probabilities: Record<string, number> }):
+  { interrupt: boolean; reason: 'same-tier' | 'unclear' | 'unknown-current' | 'different-tier'; recommended: ClaudeTier; current: ClaudeTier | null } {
+  const ranked = CLAUDE_TIERS.map(t => ({ t, p: nextModel.probabilities[t.id] ?? 0 })).sort((a, b) => b.p - a.p || b.t.rank - a.t.rank);
+  const recommended = ranked[0]!.t, cur = tierOf(current);
+  if (!cur) return { interrupt: false, reason: 'unknown-current', recommended, current: null };
+  if (cur.id === recommended.id) return { interrupt: false, reason: 'same-tier', recommended, current: cur };
+  const margin = ranked[0]!.p - (nextModel.probabilities[cur.id] ?? 0);
+  if (ranked[0]!.p < GUARD_MIN_TOP || margin < GUARD_MIN_MARGIN) return { interrupt: false, reason: 'unclear', recommended, current: cur };
+  return { interrupt: true, reason: 'different-tier', recommended, current: cur };
+}
 export const EFFORTS: ModelOption[] = [
   { id: 'low', label: 'niedrig', description: 'Simple, clearly specified work; speed matters more than depth.' },
   { id: 'medium', label: 'mittel', description: 'Normal everyday coding and questions.' },
