@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { createInterface as createPrompt } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
@@ -9,14 +9,8 @@ import { routeModel, type RoutingModel } from './model-router.js';
 import { describeContext } from './routing-context.js';
 import { resolveCodexBinary } from './codex-app-server.js';
 
-export function gatewayKey():string|undefined {
-  if(process.env.AI_GATEWAY_API_KEY)return process.env.AI_GATEWAY_API_KEY;
-  if(process.platform==='win32'&&!process.env.JEV_NO_USER_KEY)try {
-    // Only the explicitly configured gateway key; never enumerate other credentials.
-    return execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"[Environment]::GetEnvironmentVariable('AI_GATEWAY_API_KEY','User')"],{encoding:'utf8',timeout:3000,windowsHide:true,stdio:['ignore','pipe','ignore']}).trim()||undefined;
-  }catch{}
-  return undefined;
-}
+export { gatewayKey } from './gateway-key.js';
+import { gatewayKey } from './gateway-key.js';
 
 export function executionArgs(model: RoutingModel, options: {threadId?:string;write?:boolean;ephemeral?:boolean}): string[] {
   return ['-a','never','-s',options.write?'workspace-write':'read-only','exec',...(options.threadId?['resume',options.threadId]:[]),

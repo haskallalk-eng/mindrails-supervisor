@@ -1,0 +1,19 @@
+{
+  "name": "mindrails",
+  "plugins": [
+    {
+      "name": "jev",
+      "source": { "source": "local", "path": "./plugins/jev-codex" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity",
+      "interface": { "displayName": "Jev Modellwahl" }
+    },
+    {
+      "name": "jev-chat-review",
+      "source": { "source": "local", "path": "./plugins/jev-chat-review" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity",
+      "interface": { "displayName": "Jev Chat Monitor" }
+    }
+  ]
+}

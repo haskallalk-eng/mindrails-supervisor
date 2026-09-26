@@ -1,0 +1,7 @@
+{
+  "name": "mindrails",
+  "owner": { "name": "Mindrails", "url": "https://mindrails.de" },
+  "plugins": [
+    { "name": "jev", "source": "./plugins/jev-claude", "description": "Model and effort choice before every task, from published benchmarks." }
+  ]
+}

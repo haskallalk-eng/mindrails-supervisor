@@ -209,7 +209,8 @@ test('asking Jev about a chat: fixed judgments plus a yes/no probability; failur
 test('next-task model suggestion uses the highest probability among the offered models only', async () => {
   const { inspectChat, CLAUDE_MODELS } = await import('../dist/chat-inspect.js');
   const one = keys => Object.fromEntries(keys.map((k, i) => [k, i === 0 ? 1 : 0]));
-  const base = { progress: { type: 'choice', choice: 'advancing', confidence: 1, probabilities: one(['advancing', 'stalled', 'complete', 'uncertain']) },
+  const base = { task_kind: { type: 'choice', choice: 'coding', confidence: 1, probabilities: { coding: 1, agentic: 0, reasoning: 0, research: 0, simple: 0 } }, difficulty: { type: 'choice', choice: 'normal', confidence: 1, probabilities: { easy: 0, normal: 1, hard: 0 } },
+    progress: { type: 'choice', choice: 'advancing', confidence: 1, probabilities: one(['advancing', 'stalled', 'complete', 'uncertain']) },
     blocker: { type: 'choice', choice: 'none', confidence: 1, probabilities: one(['none', 'missing_information', 'environment', 'ineffective_approach', 'verification_gap', 'requirement_mismatch', 'uncertain']) },
     next_step: { type: 'choice', choice: 'continue', confidence: 1, probabilities: one(['continue', 'ask_question', 'fix_environment', 'change_approach', 'verify_result', 'realign', 'review']) } };
   const ids = CLAUDE_MODELS.map(m => m.id);
@@ -281,17 +282,87 @@ test('guard is per chat and passes immediately when Jev recommends the current m
   assert.equal(sameModel(null, 'tier-everyday'), false);
 });
 
-test('guard formatting shows tier, equivalent models, effort, current model and how to continue', async () => {
+test('recommendation text shows task, model, benchmark reason, exact effort and how to continue', async () => {
   const { formatResult } = await import('../dist/jev-hook.js');
   const j = (choice, probabilities) => ({ choice, confidence: 1, probabilities });
-  const text = formatResult({ ok: true, progress: j('advancing', { advancing: 1 }), blocker: j('none', { none: 1 }), next_step: j('continue', { continue: 1 }), question: null,
-    nextModel: j('tier-everyday', { 'tier-everyday': 0.7, 'tier-strong': 0.2, 'tier-top': 0.05, 'tier-fast': 0.05 }),
-    effort: j('medium', { medium: 0.6, high: 0.3, low: 0.1, xhigh: 0, max: 0 }), stats: { mode: 'complete' }, usage: { input_tokens: 5, output_tokens: 1 } }, 'x', { current: 'claude-opus-4-7', guard: true });
-  assert.match(text, /Stufe:   Alltag \(Sonnet 5\) .*Alltag 70 % · Stark 20 %/);
-  assert.match(text, /gleichwertig: Sonnet 5, Sonnet 4.6/);
-  assert.match(text, /Effort:  mittel .*mittel 60 %/);
-  assert.match(text, /Aktuell: Opus 4.7 \(Stufe Stark\)\n/);
+  const app = { kind: 'claude', name: 'Claude', tiers: [], candidates: ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    readTurns: () => [], current: () => ({ model: 'claude-fable-5-1', effort: null }), efforts: m => /haiku/.test(m) ? [] : ['low', 'medium', 'high', 'xhigh', 'max'],
+    display: m => ({ 'claude-opus-5-5': 'Opus 5.5', 'claude-fable-5-1': 'Fable 5.1', 'claude-opus-5': 'Opus 5' })[m] ?? String(m) };
+  const r = { ok: true, progress: j('advancing', { advancing: 1 }), blocker: j('none', { none: 1 }), next_step: j('continue', { continue: 1 }), question: null,
+    nextModel: null, taskKind: j('coding', { coding: 0.9, simple: 0.1 }), difficulty: j('normal', { normal: 0.7, hard: 0.3 }),
+    effort: j('xhigh', { xhigh: 0.6, high: 0.3, low: 0.1, medium: 0, max: 0, ultra: 0 }), stats: { mode: 'complete' }, usage: { input_tokens: 5, output_tokens: 1 } };
+  const text = formatResult(r, 'x', app, { guard: true });
+  assert.match(text, /Aufgabe: Coding · normal/);
+  assert.match(text, /Modell:  Opus 5.5   \(aktuell: Fable 5.1\)/);
+  assert.match(text, /FrontierCode v1.1 Main \(Herstellerangaben\): Opus 5.5 54,4 · Fable 5.1 50,3/);
+  assert.match(text, /Effort:  Extra hoch \(xhigh\)/);
+  assert.doesNotMatch(text, /sehr hoch/);
   assert.match(text, /dieselbe Nachricht nochmal senden/);
+});
+
+test('benchmark policy: small gaps never switch, clear gaps and big savings do', async () => {
+  const { decideModel, MIN_SWITCH_POINTS } = await import('../dist/model-policy.js');
+  const claude = ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'];
+  const codex = ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol'];
+  assert.equal(MIN_SWITCH_POINTS, 5);
+  // Coding on Fable 5.1: Opus 5.5 scores higher AND costs 60 % less -> switch.
+  const f = decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-fable-5-1', candidates: claude });
+  assert.deepEqual([f.recommended, f.interrupt], ['claude-opus-5-5', true]);
+  // Coding on Opus 5.5: already best -> stay.
+  assert.equal(decideModel({ kind: 'coding', difficulty: 'hard', current: 'claude-opus-5-5', candidates: claude }).interrupt, false);
+  // Codex coding on Sol (49.3) vs Astra (53.3): 4 points, below threshold -> stay even on hard tasks.
+  const s = decideModel({ kind: 'coding', difficulty: 'hard', current: 'gpt-6-sol', candidates: codex });
+  assert.deepEqual([s.recommended, s.interrupt, s.reason], ['gpt-6-astra', false, 'gap-below-threshold']);
+  // Codex agentic on GPT-5.6-Sol (37.3) vs Astra (57.9): clear 20.6-point gap -> switch.
+  const a = decideModel({ kind: 'agentic', difficulty: 'normal', current: 'gpt-5.6-sol', candidates: codex });
+  assert.deepEqual([a.recommended, a.interrupt, a.reason, a.gap], ['gpt-6-astra', true, 'quality-gap', 20.6]);
+  // Codex reasoning, easy: Sol (48) within 10 of Astra (53) and cheaper -> saving on Astra.
+  const e = decideModel({ kind: 'reasoning', difficulty: 'easy', current: 'gpt-6-astra', candidates: codex });
+  assert.deepEqual([e.recommended, e.interrupt, e.reason], ['gpt-6-sol', true, 'saving']);
+  // Simple task on Opus 5.5 -> Haiku (75 % cheaper); on Haiku -> stay.
+  assert.deepEqual([decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-opus-5-5', candidates: claude }).recommended, decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-opus-5-5', candidates: claude }).interrupt], ['claude-haiku-4-5', true]);
+  assert.equal(decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-haiku-4-5-20251001', candidates: claude }).interrupt, false);
+  // No published comparable score (Sonnet 5 on coding, Opus 4.7) -> no benchmark decision.
+  assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-sonnet-5', candidates: claude }).basis, 'none');
+  assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-opus-4-7', candidates: claude }).basis, 'none');
+  // Settings alias resolves.
+  assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'fable[1m]', candidates: claude }).recommended, 'claude-opus-5-5');
+});
+
+test('Codex: rollout, current model/effort, catalog tiers and exact effort ids', async (t) => {
+  const { readCodexRollout, codexTurnSettings } = await import('../dist/codex-rollout.js');
+  const { codexTiers, pickEffort } = await import('../dist/chat-inspect.js');
+  const { writeFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-codex-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, 'rollout-x-11111111-2222-4333-8444-555555555555.jsonl');
+  const ev = item => JSON.stringify({ type: 'event_msg', payload: { type: 'item_completed', item } });
+  await writeFile(file, [
+    JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-6-sol', effort: 'medium' } }),
+    ev({ type: 'UserMessage', content: [{ type: 'text', text: 'Baue den Parser.' }] }),
+    ev({ type: 'Reasoning', summary_text: ['geheim'] }),
+    ev({ type: 'CommandExecution', command: ['pwsh', '-Command', 'npm test'], exit_code: 1 }),
+    ev({ type: 'FileChange', changes: { 'src/a.ts': { type: 'update' } } }),
+    ev({ type: 'AgentMessage', content: [{ type: 'Text', text: 'Ein Test schlägt fehl.' }] }),
+    JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-6-astra', effort: 'high' } }),
+  ].join('\n'));
+  const turns = readCodexRollout(file);
+  assert.equal(turns.length, 1);
+  assert.deepEqual(turns[0].items.map(i => i.type), ['userMessage', 'command', 'fileChange', 'agentMessage']);
+  assert.deepEqual([turns[0].items[1].command, turns[0].items[1].status], ['npm test', 'failed']);
+  assert.ok(!JSON.stringify(turns).includes('geheim'));
+  assert.deepEqual(codexTurnSettings(file), { model: 'gpt-6-astra', effort: 'high' });
+  const catalog = [
+    { slug: 'gpt-6-astra', display_name: 'GPT-6-Astra', supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(effort => ({ effort })) },
+    { slug: 'gpt-6-sol', display_name: 'GPT-6-Sol', supported_reasoning_levels: ['low', 'medium'].map(effort => ({ effort })) },
+    { slug: 'gpt-6-luna', display_name: 'GPT-6-Luna', supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max'].map(effort => ({ effort })) },
+    { slug: 'gpt-5.5', display_name: 'GPT-5.5' }, { slug: 'codex-auto-review' },
+  ];
+  const tiers = codexTiers(catalog);
+  assert.deepEqual(tiers.map(x => [x.label, x.defaultModel]), [['Spitze', 'gpt-6-astra'], ['Alltag', 'gpt-6-sol'], ['Schnell', 'gpt-6-luna']]);
+  assert.match(tiers[1].members, /GPT-6-Sol, GPT-5.5/);
+  // Effort is clamped to what the model really offers: Luna has no "ultra".
+  assert.equal(pickEffort({ probabilities: { ultra: 0.9, max: 0.1 } }, tiers[2].efforts), 'max');
+  assert.equal(pickEffort({ probabilities: { high: 1 } }, []), null);
 });
 
 test('guard threshold: never within a tier, only for a clear tier difference', async () => {

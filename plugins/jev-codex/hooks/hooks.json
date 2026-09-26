@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "node \"${PLUGIN_ROOT}/hooks/jev-guard.mjs\" --app codex", "timeout": 30 } ] }
+    ]
+  }
+}

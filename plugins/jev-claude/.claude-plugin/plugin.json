@@ -1,0 +1,8 @@
+{
+  "name": "jev",
+  "version": "0.3.0",
+  "description": "Jev picks the right Claude model and effort for every task, from published benchmarks. `#jev an` once per chat; `#jev hilfe` for commands.",
+  "author": { "name": "Mindrails", "url": "https://mindrails.de" },
+  "homepage": "https://github.com/haskallalk-eng/mindrails-supervisor",
+  "license": "Apache-2.0"
+}

@@ -66,3 +66,16 @@ Jev chooses a capability tier, not a version: Spitze (Fable 5.1/5), Stark (Opus 
 Tier and effort criteria quote Anthropic's published measurements from the Claude API cost-optimization guidance (e.g. Opus 5 matched Fable 5 on a coding subset, 91.7 % vs 91.3 %, at about 60 % of the cost; Haiku 4.5 63 % vs Opus 5 92 % on knowledge questions at about a tenth of the cost; effort curves for research vs long-horizon coding). They were measured by Anthropic on Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5, not independently and not on Fable 5.1 / Opus 5.5; no independent per-model benchmark numbers are embedded. The cost line is exact arithmetic on list prices per token; cost per task can differ. Jev's probabilities remain relative judgments, not calibrated success rates.
 
 Every guard decision is appended to `%LOCALAPPDATA%\mindrails-jev\guard-log.jsonl` (time, session id, current model, recommended tier, probabilities, whether the user followed — never prompt text), so recommendations can later be checked against real outcomes.
+
+### Benchmark policy (replaces the tier threshold where data exists)
+
+Jev classifies each task into a kind (`coding`, `agentic`, `reasoning`, `research`, `simple`) and a difficulty (`easy`, `normal`, `hard`). `src/model-policy.ts` then decides deterministically from `src/model-benchmarks.ts` (FrontierCode v1.1 Main for coding, Terminal-Bench 4.0 for agentic work, the Artificial Analysis Intelligence Index for reasoning/research; each score with source URL, vendor/independent, as of 2026-09-26):
+
+- Candidates within a tolerance of the best score count as equally good (easy 10, normal 5, hard 2 points); the cheapest of them is recommended (Claude: list price per output token; Codex: measured cost per task).
+- The user is interrupted only for a quality gap of at least 5 points (published scores carry roughly ±2–5 points of noise and vendor-harness differences) or a saving of at least 50 % while the current model is not better beyond tolerance. Simple tasks use the cheapest model if that saves at least 50 %.
+- Where no comparable published score exists (Sonnet 5, Haiku 4.5, Opus 4.x on these benchmarks), the previous tier judgment by Jev is used and this is stated in the output.
+- Effort is Jev's choice clamped to the levels the recommended model offers in that app: Claude `low/medium/high/xhigh/max` (shown as Niedrig/Mittel/Hoch/Extra hoch/Max; none for Haiku 4.5), Codex per model from `~/.codex/models_cache.json` (e.g. `ultra` only for some GPT-6 models). In Codex the current effort is read from the conversation and shown next to the recommendation.
+
+### Packaging
+
+`plugins/jev-claude` (Claude Code plugin, marketplace `.claude-plugin/marketplace.json`) and `plugins/jev-codex` (Codex plugin, marketplace `.agents/plugins/marketplace.json`) contain the same self-contained hook bundle (`hooks/jev-guard.mjs`, built by `npm run build:jev-plugins`), so installing from GitHub needs no build step. Neither is an MCP server: MCP servers offer tools the model may call, whereas Jev must run before the model sees the prompt, which only a prompt hook can do.

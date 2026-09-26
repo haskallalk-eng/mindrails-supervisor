@@ -20,9 +20,8 @@ export type PanelOptions = {
   token?: string; key?: () => string | undefined; route?: typeof routeModel; contextBudget?: number; inspect?: typeof inspectChat;
 };
 
-export function stateDirectory(): string {
-  return process.env.JEV_PANEL_HOME ?? (process.platform === 'win32' && process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'mindrails-jev') : join(homedir(), '.mindrails-jev'));
-}
+export { stateDirectory } from './state-dir.js';
+import { stateDirectory } from './state-dir.js';
 
 /** Stable per-user token so a bookmarked panel address keeps working across restarts. */
 function panelToken(dir: string): string {

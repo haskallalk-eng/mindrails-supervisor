@@ -1,5 +1,40 @@
 # Mindrails Supervisor
 
+## Jev – die richtige KI-Modellwahl vor jeder Aufgabe (Claude Code & Codex)
+
+Jev ordnet jede neue Aufgabe ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und empfiehlt den passenden Effort (nur Stufen, die das Modell in der App wirklich hat). Jev hält eine Nachricht nur an, wenn ein anderes Modell **klar** besser ist (≥ 5 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 50 % günstiger** – sonst geht sie sofort durch.
+
+**Installieren (Claude Code):**
+
+```sh
+claude plugin marketplace add haskallalk-eng/mindrails-supervisor
+claude plugin install jev@mindrails
+```
+
+**Installieren (Codex):**
+
+```sh
+codex plugin marketplace add haskallalk-eng/mindrails-supervisor --ref main
+codex plugin add jev@mindrails
+```
+
+Voraussetzungen: Node.js ≥ 20 im PATH und ein Vercel-AI-Gateway-Schlüssel als Umgebungsvariable `AI_GATEWAY_API_KEY` (Windows: `setx AI_GATEWAY_API_KEY "…"`, danach App neu starten). Chat-Auszüge gehen an Jev (Vercel AI Gateway / TypeSafe) und können Kosten verursachen. Bis der Branch in `main` ist: bei Codex `--ref ux/codex-chat-review`.
+
+**Benutzen – im Chat tippen:**
+
+| Eingabe | Wirkung |
+|---|---|
+| `#jev an` | Wächter für diesen Chat einschalten (einmal) – danach läuft Jev bei jeder Nachricht automatisch |
+| `#jev aus` | Wächter ausschalten |
+| `#jev` | Chat analysieren (Fortschritt, Hindernis, nächster Schritt) |
+| `#jev <Aufgabe>` | Modell + Effort für eine Aufgabe empfehlen |
+| `#jev? <Frage>` | Ja/Nein-Frage zum Chat, Antwort in % |
+| `#jev hilfe` | Befehle anzeigen |
+
+Wird eine Nachricht angehalten: Modell/Effort im Modellmenü umstellen und **dieselbe Nachricht nochmal senden** (↑, Enter) – oder direkt nochmal senden, um Jev zu ignorieren. Hooks können Modell und Effort nicht selbst umstellen; das bleibt ein Klick im Menü. Details, Benchmark-Quellen und Grenzen: [docs/model-routing.md](docs/model-routing.md).
+
+---
+
 A local MCP completion gate for AI agents, with optional Jev judgments and deterministic policies.
 
 An independent open-source project by [Mindrails](https://mindrails.de).
