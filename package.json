@@ -31,7 +31,8 @@
   "private": true,
   "bin": {
     "mindrails-supervisor": "dist/cli.js",
-    "jev": "dist/jev.js"
+    "jev": "dist/jev.js",
+    "jev-panel": "dist/jev-panel.js"
   },
   "files": [
     "dist",

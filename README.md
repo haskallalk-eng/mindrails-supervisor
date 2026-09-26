@@ -4,7 +4,7 @@ A local MCP completion gate for AI agents, with optional Jev judgments and deter
 
 An independent open-source project by [Mindrails](https://mindrails.de).
 
-**New: route before execution.** The separate local `jev` command asks Jev to choose between the available GPT-6 Astra, Sol and Luna models, then starts Codex with the highest-probability model. Run `npm run build`, `npm link`, then `jev --workspace-write` in your project. Each input is routed before execution; subsequent inputs include visible conversation history. This does **not** intercept the Codex desktop chat composer. See [setup, failure behavior and limitations](docs/model-routing.md). This preflight argmax policy is separate from the plugin's advisory uncertainty policy below.
+**New: route before execution.** The separate local `jev` command asks Jev to choose between the available GPT-6 Astra, Sol and Luna models, then starts Codex with the highest-probability model. Run `npm run build`, `npm link`, then `jev --workspace-write` in your project. Each input is routed before execution; subsequent inputs include visible conversation history. New: `jev-panel` serves a small side panel (open it in Codex's in-app browser) that routes and continues a chosen conversation, with long-history selection, visible probabilities and approvals. This does **not** intercept the Codex desktop chat composer, and it cannot write to a conversation while the Codex app has it open. See [setup, failure behavior and limitations](docs/model-routing.md). This preflight argmax policy is separate from the plugin's advisory uncertainty policy below.
 
 Check explicit requirements before an agent stops, and flag repeated steps. The host remains responsible for verification, permissions and execution.
 

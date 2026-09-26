@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { modelSchema, type RoutingModel } from './model-router.js';
+import { buildRoutingContext, toHistoryTurn, type ContextStats } from './routing-context.js';
 
-export async function readCodexRoutingState(binary: string, threadId?: string): Promise<{models: RoutingModel[]; context?: unknown; currentModel?: string}> {
+export async function readCodexRoutingState(binary: string, threadId?: string): Promise<{models: RoutingModel[]; context?: unknown; contextStats?: ContextStats; currentModel?: string}> {
   const child=spawn(binary,['app-server','--stdio'],{stdio:['pipe','pipe','ignore'],windowsHide:true});
   let id=0;
   const pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>();
@@ -24,10 +25,15 @@ export async function readCodexRoutingState(binary: string, threadId?: string): 
     } while(cursor);
     if(!models.length)throw new Error('NO_GPT6_MODELS_AVAILABLE');
     if(!threadId)return {models};
-    const {thread}=await call('thread/read',{threadId,includeTurns:true});
-    if(thread.status?.type==='active' || thread.turns?.some((t:any)=>t.status==='inProgress')) throw new Error('THREAD_ALREADY_RUNNING');
-    // Only visible history; internal reasoning is never forwarded to Jev.
-    const context=(thread.turns??[]).map((t:any)=>({status:t.status,items:(t.items??[]).filter((i:any)=>['userMessage','agentMessage','commandExecution','fileChange','mcpToolCall'].includes(i.type))}));
-    return {models,context};
+    const {thread}=await call('thread/read',{threadId,includeTurns:false});
+    if(thread.status?.type==='active') throw new Error('THREAD_ALREADY_RUNNING');
+    // Only visible history, paginated; internal reasoning is never forwarded to Jev.
+    const summary:any[]=[];let turnCursor:string|null=null;let turnPages=0;
+    do{const page=await call('thread/turns/list',{threadId,limit:200,sortDirection:'desc',itemsView:'summary',...(turnCursor?{cursor:turnCursor}:{})});summary.push(...(page.data??[]));turnCursor=page.nextCursor??null;}while(turnCursor&&++turnPages<50);
+    if(summary[0]?.status==='inProgress')throw new Error('THREAD_ALREADY_RUNNING');
+    const full=await call('thread/turns/list',{threadId,limit:3,sortDirection:'desc',itemsView:'full'});
+    const byId=new Map((full.data??[]).map((t:any)=>[t.id,t]));
+    const built=buildRoutingContext(summary.map(t=>toHistoryTurn(byId.get(t.id)??t)).reverse(),{olderUnread:Boolean(turnCursor)});
+    return {models,context:built.context,contextStats:built.stats,currentModel:thread.model};
   } finally {clearTimeout(timer);lines.close();child.kill();}
 }

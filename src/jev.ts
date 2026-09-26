@@ -6,8 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { readCodexRoutingState } from './codex-catalog.js';
 import { routeModel, type RoutingModel } from './model-router.js';
+import { describeContext } from './routing-context.js';
+import { resolveCodexBinary } from './codex-app-server.js';
 
-function gatewayKey():string|undefined {
+export function gatewayKey():string|undefined {
   if(process.env.AI_GATEWAY_API_KEY)return process.env.AI_GATEWAY_API_KEY;
   if(process.platform==='win32')try {
     // Only the explicitly configured gateway key; never enumerate other credentials.
@@ -41,18 +43,19 @@ async function execute(binary:string,args:string[],task:string):Promise<{threadI
 
 async function main() {
   const args=process.argv.slice(2);
-  if(args.includes('--help')){console.log('Jev – GPT-6-Auswahl vor jeder Aufgabe\njev [--workspace-write] [--resume UUID] [--ephemeral] ["Aufgabe"]\nOhne Aufgabe: interaktiver Chat. Standard: nur lesen. --workspace-write erlaubt Projektänderungen; keine zusätzlichen Freigaben.\nJev sendet Aufgabe und sichtbaren Verlauf an Vercel/TypeSafe; kann kosten. Codex nutzt deine bestehende Anmeldung.\nEigener lokaler Startweg, keine automatische Umschaltung im Codex-Chatfenster.');return;}
+  if(args.includes('--help')){console.log('Jev – GPT-6-Auswahl vor jeder Aufgabe\njev [--workspace-write] [--resume UUID] [--ephemeral] ["Aufgabe"]\nOhne Aufgabe: interaktiver Chat. Standard: nur lesen. --workspace-write erlaubt Projektänderungen; keine zusätzlichen Freigaben.\nJev sendet Aufgabe und sichtbaren Verlauf an Vercel/TypeSafe; kann kosten. Codex nutzt deine bestehende Anmeldung.\nEigener lokaler Startweg, keine automatische Umschaltung im Codex-Chatfenster. Seitenfeld: jev-panel --help.');return;}
   const resumeAt=args.indexOf('--resume');let threadId:string|undefined;
   if(resumeAt>=0){threadId=args[resumeAt+1];if(!threadId||!/^[-a-f0-9]{36}$/i.test(threadId))throw new Error('INVALID_THREAD_ID');args.splice(resumeAt,2);}
   const write=args.includes('--workspace-write'),ephemeral=args.includes('--ephemeral');
   const rest=args.filter(a=>!['--workspace-write','--ephemeral'].includes(a));
   if(rest.length>1||rest.some(a=>a.startsWith('--'))||ephemeral&&threadId)throw new Error('INVALID_ARGUMENTS');
-  const binary=process.env.JEV_CODEX_BIN??'codex';
+  const binary=resolveCodexBinary();
   const key=gatewayKey();
   let currentModel:string|undefined;
   const run=async(task:string)=>{
     const state=await readCodexRoutingState(binary,threadId);
-    const baseline=state.models.find(m=>m.model===currentModel)??state.models.find(m=>m.isDefault)??state.models[0]!;
+    const baseline=state.models.find(m=>m.model===(currentModel??state.currentModel))??state.models.find(m=>m.isDefault)??state.models[0]!;
+    if(state.contextStats)console.error(`Kontext: ${describeContext(state.contextStats)}`);
     const decision=await routeModel({task,context:state.context,models:state.models,baseline:baseline.model,key});
     console.error(decision.source==='jev'
       ? `Jev: ${Object.entries(decision.probabilities!).map(([m,p])=>`${m.replace('gpt-6-','')} ${(p*100).toFixed(1)} %`).join(' · ')} → ${decision.model}`
