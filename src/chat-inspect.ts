@@ -14,18 +14,24 @@ export type ModelOption = { id: string; label: string; description: string };
 // Jev decides the capability TIER, not an individual model: versions within a
 // tier (e.g. Opus 4.6 vs 4.7) rarely matter enough to interrupt the user.
 // Advisory only: the user switches the model in the Claude app.
-export type ClaudeTier = ModelOption & { rank: number; family: RegExp; defaultModel: string; members: string };
+export type ClaudeTier = ModelOption & { rank: number; family: RegExp; defaultModel: string; members: string; price: { input: number; output: number } };
+// Evidence below is quoted from Anthropic's published measurements in the Claude
+// API guidance (cost-optimization guide, cached 2026-06). They were measured on
+// Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5 by Anthropic itself, not independently,
+// and not on Fable 5.1 / Opus 5.5. Prices: API list price per 1M tokens (input/output).
 export const CLAUDE_TIERS: ClaudeTier[] = [
-  { id: 'tier-top', label: 'Spitze', rank: 4, family: /fable|mythos/i, defaultModel: 'claude-fable-5-1', members: 'Fable 5.1, Fable 5',
-    description: 'Most capable and most expensive tier ($10/$50 per 1M tokens: Fable 5.1, Fable 5): only for the most demanding reasoning and long-horizon agentic work where the strongest model clearly pays off.' },
-  { id: 'tier-strong', label: 'Stark', rank: 3, family: /opus/i, defaultModel: 'claude-opus-5-5', members: 'Opus 5.5, Opus 5, Opus 4.8, 4.7, 4.6',
-    description: 'Strong tier ($4-5/$20-25: Opus 5.5, Opus 5, Opus 4.x): hard reasoning, ambiguous architecture, subtle debugging, security-sensitive or costly-mistake work, long multi-step coding.' },
-  { id: 'tier-everyday', label: 'Alltag', rank: 2, family: /sonnet/i, defaultModel: 'claude-sonnet-5', members: 'Sonnet 5, Sonnet 4.6',
-    description: 'Everyday tier ($2-3/$10-15: Sonnet 5, Sonnet 4.6): normal implementation, refactoring, tests, reviews and documentation with clear requirements.' },
-  { id: 'tier-fast', label: 'Schnell', rank: 1, family: /haiku/i, defaultModel: 'claude-haiku-4-5-20251001', members: 'Haiku 4.5',
-    description: 'Fast tier ($1/$5: Haiku 4.5): simple, bounded, low-risk tasks such as small edits, lookups, renames, formatting or short answers.' },
+  { id: 'tier-top', label: 'Spitze', rank: 4, family: /fable|mythos/i, defaultModel: 'claude-fable-5-1', members: 'Fable 5.1, Fable 5', price: { input: 10, output: 50 },
+    description: 'Most capable, most expensive tier ($10/$50: Fable 5.1, Fable 5). Use only where the ceiling matters: very hard reasoning, deep multi-topic research, long-horizon agentic work. Measured: on a coding subset Opus 5 matched Fable 5 (91.7% vs 91.3%) at about 60% of its cost, so Fable rarely pays off for ordinary coding; Fable 5 at low effort beat Sonnet 5 on a deep-research benchmark at about 10% lower cost per task.' },
+  { id: 'tier-strong', label: 'Stark', rank: 3, family: /opus/i, defaultModel: 'claude-opus-5-5', members: 'Opus 5.5, Opus 5, Opus 4.8, 4.7, 4.6', price: { input: 4, output: 20 },
+    description: 'Strong tier ($4-5/$20-25: Opus 5.5, Opus 5, Opus 4.x). Recommended starting point for most agentic coding: long multi-step changes, hard debugging, ambiguous architecture, security-sensitive or costly-mistake work. Measured: Opus 5 answered knowledge questions at 92% accuracy (Haiku 4.5: 63%) and matched Fable 5 on a coding subset at about 60% of its cost.' },
+  { id: 'tier-everyday', label: 'Alltag', rank: 2, family: /sonnet/i, defaultModel: 'claude-sonnet-5', members: 'Sonnet 5, Sonnet 4.6', price: { input: 2, output: 10 },
+    description: 'Everyday tier ($2-3/$10-15: Sonnet 5, Sonnet 4.6), half the per-token price of Opus 5.5. Normal, clearly specified implementation, refactoring, tests, reviews and documentation. Measured: on deep research it was beaten by Fable 5 at low effort at similar cost, so it is a poor choice for open-ended research.' },
+  { id: 'tier-fast', label: 'Schnell', rank: 1, family: /haiku/i, defaultModel: 'claude-haiku-4-5-20251001', members: 'Haiku 4.5', price: { input: 1, output: 5 },
+    description: 'Fast tier ($1/$5: Haiku 4.5). Simple, bounded, checkable tasks: small edits, renames, formatting, lookups, short answers. Measured: about a tenth of Opus 5 cost per knowledge question but 63% vs 92% accuracy; suited to high-volume checkable work, not long agentic loops.' },
 ];
 export const CLAUDE_MODELS: ModelOption[] = CLAUDE_TIERS;
+/** Relative per-token list price of tier b versus tier a (output tokens dominate agentic cost). */
+export const priceRatio = (from: ClaudeTier, to: ClaudeTier) => to.price.output / from.price.output;
 export const tierOf = (model: string | null | undefined): ClaudeTier | null => model ? CLAUDE_TIERS.find(t => t.family.test(model)) ?? null : null;
 /** "claude-opus-4-7" -> "Opus 4.7", "fable[1m]" -> "Fable". */
 export function modelDisplay(model: string): string {
@@ -48,11 +54,11 @@ export function guardDecision(current: string | null, nextModel: { probabilities
   return { interrupt: true, reason: 'different-tier', recommended, current: cur };
 }
 export const EFFORTS: ModelOption[] = [
-  { id: 'low', label: 'niedrig', description: 'Simple, clearly specified work; speed matters more than depth.' },
-  { id: 'medium', label: 'mittel', description: 'Normal everyday coding and questions.' },
-  { id: 'high', label: 'hoch', description: 'Non-trivial implementation, debugging or multi-file changes where thoroughness pays off.' },
-  { id: 'xhigh', label: 'sehr hoch', description: 'Long agentic or complex coding tasks with many steps.' },
-  { id: 'max', label: 'maximal', description: 'Only when correctness matters far more than cost and time.' },
+  { id: 'low', label: 'niedrig', description: 'Simple, clearly specified or easily checkable work. Measured: on research/knowledge work low gave up 1-3 points for a third to a half less cost; on long-horizon coding (Opus 5) about 8 points for a quarter of the cost.' },
+  { id: 'medium', label: 'mittel', description: 'Normal everyday coding and questions. Measured: on research/knowledge work medium matched the default accuracy at 70-85% of its cost; on long-horizon coding about 2 points below default at half the cost.' },
+  { id: 'high', label: 'hoch', description: 'Non-trivial implementation, debugging or multi-file changes where thoroughness pays off (the API default).' },
+  { id: 'xhigh', label: 'sehr hoch', description: 'Long agentic or complex coding tasks with many steps (Claude Code default for coding).' },
+  { id: 'max', label: 'maximal', description: 'Only for reasoning-ceiling work where correctness matters far more than cost. Measured: on deep multi-subtopic research each effort step bought about 2.4 rubric points.' },
 ];
 type Judgment = { choice: string; confidence: number; probabilities: Record<string, number> };
 export type InspectResult =

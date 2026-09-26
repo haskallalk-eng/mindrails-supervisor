@@ -10,7 +10,8 @@ import { mkdirSync, writeFileSync, renameSync, readFileSync, openSync, readSync,
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { CLAUDE_TIERS, CLAUDE_MODELS, EFFORTS, guardDecision, inspectChat, inspectLabels, modelDisplay, readClaudeSession, tierOf, type InspectResult } from './chat-inspect.js';
+import { CLAUDE_TIERS, CLAUDE_MODELS, EFFORTS, guardDecision, inspectChat, inspectLabels, modelDisplay, priceRatio, readClaudeSession, tierOf, type InspectResult } from './chat-inspect.js';
+import { appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { describeContext } from './routing-context.js';
 
@@ -99,16 +100,25 @@ export function formatResult(r: InspectResult, description: string | null, opts:
     if (opts.current) {
       const same = sameModel(opts.current, r.nextModel.choice);
       lines.push(`  Aktuell: ${modelLabel(opts.current)} (Stufe ${tierOf(opts.current)?.label ?? 'unbekannt'})${same ? ' – passt bereits' : ''}`);
+      const from = tierOf(opts.current);
+      if (from && tier && !same) {
+        const ratio = priceRatio(from, tier);
+        lines.push(`  Kosten:  ${modelDisplay(tier.defaultModel)} kostet pro Token ${ratio < 1 ? `nur ${Math.round(ratio * 100)} %` : `das ${ratio.toFixed(1).replace('.', ',')}-Fache`} von ${modelLabel(opts.current)} (Listenpreis; pro Aufgabe kann es abweichen)`);
+      }
     }
   }
   lines.push(`  Chat:    ${L.progress![r.progress.choice] ?? r.progress.choice} · Hindernis: ${L.blocker![r.blocker.choice] ?? r.blocker.choice} · nächster Schritt: ${L.next_step![r.next_step.choice] ?? r.next_step.choice}`);
   if (r.question) lines.push(`  Frage:   „${r.question.text}“ → ${pct(r.question.yes)} ja`);
   if (opts.guard) lines.push('', 'Weiter: Modell/Effort bei Bedarf im Modellmenü umstellen, dann dieselbe Nachricht nochmal senden (↑ und Enter).', 'Nochmal senden ohne Umstellen = Jev ignorieren. Wächter ausschalten: #jev aus');
   else if (r.nextModel) lines.push('', 'Übernehmen: Modell/Effort im Modellmenü umstellen und die Aufgabe ohne „#jev“ senden.');
-  lines.push(`Gelesen: ${description ?? '–'} · ${r.usage.input_tokens} Tokens. Wahrscheinlichkeiten, keine geprüften Fakten.`);
+  lines.push(`Gelesen: ${description ?? '–'} · ${r.usage.input_tokens} Tokens. Jev-Wahrscheinlichkeiten, gestützt auf Anthropics eigene Messwerte (nicht unabhängig, für Fable 5/Opus 5 gemessen) – keine Garantie.`);
   return lines.join('\n');
 }
 
+/** Local decision log (no prompt text) so recommendations can later be checked against what actually happened. */
+export function logDecision(stateDir: string, entry: Record<string, unknown>) {
+  try { mkdirSync(stateDir, { recursive: true }); appendFileSync(join(stateDir, 'guard-log.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n'); } catch {}
+}
 const block = (reason: string) => process.stdout.write(JSON.stringify({ decision: 'block', reason }) + '\n');
 
 async function runJev(event: any, opts: { task?: string; question?: string }) {
@@ -148,13 +158,19 @@ async function main() {
   const hash = createHash('sha256').update(session + '\0' + prompt.trim()).digest('hex');
   const pendingFile = join(stateDir, 'guard-pending.json');
   const pending = readJson(pendingFile);
-  if (pending?.hash === hash && Date.now() - pending.at < PASS_WINDOW_MS) { writeJson(pendingFile, {}); return; } // second send: user decided
+  if (pending?.hash === hash && Date.now() - pending.at < PASS_WINDOW_MS) { // second send: user decided
+    writeJson(pendingFile, {});
+    const now = effectiveModel(String(event.transcript_path));
+    logDecision(stateDir, { event: 'resent', session, current: now, recommended: pending.recommended ?? null, followed: pending.recommended ? tierOf(now)?.id === pending.recommended : null });
+    return;
+  }
   try {
     const r = await runJev(event, { task: prompt });
     if (!r.ok) { process.stdout.write(JSON.stringify({ systemMessage: `Jev-Wächter: keine Empfehlung (${r.reason}) – Nachricht wurde normal gesendet.` }) + '\n'); return; }
     const current = effectiveModel(String(event.transcript_path));
     const decision = r.nextModel ? guardDecision(current, r.nextModel) : null;
     if (decision && !decision.interrupt) {
+      logDecision(stateDir, { event: 'passed', session, current, recommended: r.nextModel?.choice ?? null, reason: decision.reason, probabilities: r.nextModel?.probabilities ?? null });
       const effort = r.effort ? EFFORTS.find(e => e.id === r.effort!.choice)?.label : null;
       const why = decision.reason === 'same-tier' ? `${modelLabel(current)} passt (Stufe ${decision.current!.label})`
         : decision.reason === 'unclear' ? `Jev tendiert zu ${decision.recommended.label}, aber nicht deutlich genug – ${modelLabel(current)} bleibt`
@@ -162,7 +178,8 @@ async function main() {
       process.stdout.write(JSON.stringify({ systemMessage: `Jev: ${why}${effort ? ` · Effort-Tipp: ${effort}` : ''} – Nachricht gesendet.` }) + '\n');
       return;
     }
-    writeJson(pendingFile, { hash, at: Date.now() });
+    writeJson(pendingFile, { hash, at: Date.now(), recommended: r.nextModel?.choice ?? null });
+    logDecision(stateDir, { event: 'held', session, current, recommended: r.nextModel?.choice ?? null, probabilities: r.nextModel?.probabilities ?? null, effort: r.effort?.choice ?? null });
     return block(formatResult(r, r.stats ? describeContext(r.stats) : null, { current, guard: true }));
   } catch { /* never hold up the user's work because of Jev */ }
 }
