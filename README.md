@@ -18,7 +18,7 @@ codex plugin marketplace add haskallalk-eng/mindrails-supervisor --ref main
 codex plugin add jev@mindrails
 ```
 
-Voraussetzungen: Node.js ≥ 20 im PATH und ein Vercel-AI-Gateway-Schlüssel als Umgebungsvariable `AI_GATEWAY_API_KEY` (Windows: `setx AI_GATEWAY_API_KEY "…"`, danach App neu starten). Chat-Auszüge gehen an Jev (Vercel AI Gateway / TypeSafe) und können Kosten verursachen. Bis der Branch in `main` ist: bei Codex `--ref ux/codex-chat-review`.
+Voraussetzungen: Node.js ≥ 20 im PATH und ein Vercel-AI-Gateway-Schlüssel als Umgebungsvariable `AI_GATEWAY_API_KEY` (Windows: `setx AI_GATEWAY_API_KEY "…"`, danach App neu starten). Chat-Auszüge gehen an Jev (Vercel AI Gateway / TypeSafe) und können Kosten verursachen. Bis der Branch in `main` ist: Claude `claude plugin marketplace add "https://github.com/haskallalk-eng/mindrails-supervisor.git#ux/codex-chat-review"`, Codex `--ref ux/codex-chat-review` (beides getestet).
 
 **Benutzen – im Chat tippen:**
 
