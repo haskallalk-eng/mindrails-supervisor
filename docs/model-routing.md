@@ -52,3 +52,9 @@ The panel cannot see which window is focused. Instead, prompt hooks record the c
 - Codex: the `jev-chat-review` plugin adds `hooks/jev-focus.mjs` to `UserPromptSubmit` (async, id only). The installed plugin copy under `~/.codex/plugins/cache/local-jev-dev/…` must contain it; Codex loads hooks at start.
 
 Computer use is not used for this: it would need screen access every time, is slow, and the panel cannot invoke Claude anyway.
+
+### Guard mode and effort (Claude Code)
+
+`#jev an` turns on the guard: every new prompt (not slash commands, not replies under 20 characters) is first sent to Jev, which recommends one of Fable 5.1 / Opus 5.5 / Sonnet 5 / Haiku 4.5 (list prices included in the criteria) and an effort level (low … max), and shows the current model from the transcript. The prompt is held; sending the identical text again within 15 minutes lets it through, so switching model/effort in the model menu first is optional. If Jev fails, the prompt is sent normally with a notice. `#jev aus` turns the guard off; `#jev hilfe` lists the commands.
+
+The hook cannot switch the model: Claude Code hooks can block or add context, not change the model, and a Claude session may not re-price itself. Only another Claude session can switch a chat's model/effort through the desktop app's session tools, and the app then asks the user to confirm.

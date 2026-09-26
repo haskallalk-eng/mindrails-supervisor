@@ -215,7 +215,7 @@ test('next-task model suggestion uses the highest probability among the offered 
   const ids = CLAUDE_MODELS.map(m => m.id);
   const reply = next_model => async (_u, o) => { const b = JSON.parse(o.body); assert.equal(b.state.nextTask, 'Tippfehler fixen'); assert.deepEqual(Object.keys(b.questions.next_model.criteria), ids); return new Response(JSON.stringify({ answers: { ...base, next_model }, usage: { input_tokens: 1, output_tokens: 1 } })); };
   const input = { turns: [turn(1, 'x')], task: 'Tippfehler fixen', models: CLAUDE_MODELS, key: 'k', source: 't' };
-  const r = await inspectChat(input, reply({ type: 'choice', choice: ids[0], confidence: 0.3, probabilities: { [ids[0]]: 0.2, [ids[1]]: 0.1, [ids[2]]: 0.7 } }));
+  const r = await inspectChat(input, reply({ type: 'choice', choice: ids[0], confidence: 0.3, probabilities: { [ids[0]]: 0.2, [ids[1]]: 0.1, [ids[2]]: 0.7, [ids[3]]: 0 } }));
   assert.equal(r.nextModel.choice, ids[2], 'argmax wins over the stated choice');
   const bad = await inspectChat(input, reply({ type: 'choice', choice: 'gpt-4', confidence: 1, probabilities: { 'gpt-4': 1 } }));
   assert.deepEqual([bad.ok, bad.reason], [false, 'JEV_INVALID_RESPONSE']);
@@ -227,9 +227,12 @@ test('prompt hook: #jev commands are recognized, normal prompts are not; focus r
   const { parseJevCommand, writeFocus, readFocus, formatResult } = await import('../dist/jev-hook.js');
   assert.equal(parseJevCommand('Mach weiter'), null);
   assert.equal(parseJevCommand('Bitte #jev nutzen'), null);
-  assert.deepEqual(parseJevCommand('#jev'), { task: undefined });
-  assert.deepEqual(parseJevCommand('  #JEV  Baue Tests '), { task: 'Baue Tests' });
-  assert.deepEqual(parseJevCommand('#jev? Sind die Tests grün?'), { question: 'Sind die Tests grün?' });
+  assert.deepEqual(parseJevCommand('#jev'), { kind: 'analyze', task: undefined });
+  assert.deepEqual(parseJevCommand('  #JEV  Baue Tests '), { kind: 'analyze', task: 'Baue Tests' });
+  assert.deepEqual(parseJevCommand('#jev? Sind die Tests grün?'), { kind: 'question', question: 'Sind die Tests grün?' });
+  assert.deepEqual(parseJevCommand('#jev an'), { kind: 'guard', enabled: true });
+  assert.deepEqual(parseJevCommand('#jev AUS'), { kind: 'guard', enabled: false });
+  assert.deepEqual(parseJevCommand('#jev hilfe'), { kind: 'help' });
   const dir = await mkdtemp(join(tmpdir(), 'jev-focus-')); t.after(() => rm(dir, { recursive: true, force: true }));
   assert.equal(readFocus(dir), null);
   writeFocus(dir, { kind: 'claude', id: '11111111-2222-4333-8444-555555555555', at: 5 });
@@ -247,4 +250,32 @@ test('prompt hook process: normal prompt passes silently and records focus; #jev
   assert.equal(JSON.parse(await readFile(join(dir, 'focus.json'), 'utf8')).kind, 'claude');
   const cmd = spawnSync(process.execPath, ['dist/jev-hook.js'], { input: ev('#jev'), env, encoding: 'utf8' });
   const out = JSON.parse(cmd.stdout); assert.equal(out.decision, 'block'); assert.match(out.reason, /JEV_KEY_MISSING/);
+});
+
+test('guard mode: first send is held with a recommendation, the identical second send passes; short prompts pass', async (t) => {
+  const { spawnSync } = await import('node:child_process');
+  const http = await import('node:http');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-guard-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, JEV_PANEL_HOME: dir, JEV_NO_USER_KEY: '1', AI_GATEWAY_API_KEY: '' };
+  const run = (prompt) => spawnSync(process.execPath, ['dist/jev-hook.js'], { input: JSON.stringify({ session_id: '11111111-2222-4333-8444-555555555555', transcript_path: 'tests/fixtures/claude-session.jsonl', prompt }), env, encoding: 'utf8' });
+  assert.match(JSON.parse(run('#jev an').stdout).reason, /Wächter ist AN/);
+  // Without a key Jev cannot answer: the prompt must go through (never blocked), with a visible notice.
+  const noKey = JSON.parse(run('Baue bitte einen Parser für CSV-Dateien').stdout);
+  assert.equal(noKey.decision, undefined); assert.match(noKey.systemMessage, /JEV_KEY_MISSING.*normal gesendet/);
+  assert.equal(run('ok danke').stdout, '');
+  assert.equal(run('/compact').stdout, '');
+  assert.match(JSON.parse(run('#jev aus').stdout).reason, /AUS/);
+  assert.equal(run('Baue bitte einen Parser für CSV-Dateien').stdout, '');
+});
+
+test('guard formatting shows model, effort, current model and how to continue', async () => {
+  const { formatResult } = await import('../dist/jev-hook.js');
+  const j = (choice, probabilities) => ({ choice, confidence: 1, probabilities });
+  const text = formatResult({ ok: true, progress: j('advancing', { advancing: 1 }), blocker: j('none', { none: 1 }), next_step: j('continue', { continue: 1 }), question: null,
+    nextModel: j('claude-sonnet-5', { 'claude-sonnet-5': 0.7, 'claude-opus-5-5': 0.2, 'claude-fable-5-1': 0.05, 'claude-haiku-4-5-20251001': 0.05 }),
+    effort: j('medium', { medium: 0.6, high: 0.3, low: 0.1, xhigh: 0, max: 0 }), stats: { mode: 'complete' }, usage: { input_tokens: 5, output_tokens: 1 } }, 'x', { current: 'claude-opus-5-5', guard: true });
+  assert.match(text, /Modell:  Sonnet 5 .*Sonnet 5 70 % · Opus 5.5 20 %/);
+  assert.match(text, /Effort:  mittel .*mittel 60 %/);
+  assert.match(text, /Aktuell: Opus 5.5\n/);
+  assert.match(text, /dieselbe Nachricht nochmal senden/);
 });

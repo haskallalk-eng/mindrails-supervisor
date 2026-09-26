@@ -170,6 +170,7 @@ async function run(withTask,auto){
       if(r.nextModel&&r.models){const m=el('div','card');const names=Object.fromEntries(r.models.map(x=>[x.id,x.label]));
         m.appendChild(el('div','head','Empfehlung für die nächste Aufgabe: '+names[r.nextModel.choice]+' ('+(r.nextModel.probabilities[r.nextModel.choice]*100).toFixed(0)+' %)'));
         m.appendChild(bars(r.nextModel,names,4));
+        if(r.effort&&r.efforts){const en=Object.fromEntries(r.efforts.map(x=>[x.id,x.label]));m.appendChild(el('div','head','Effort: '+en[r.effort.choice]+' ('+(r.effort.probabilities[r.effort.choice]*100).toFixed(0)+' %)'));m.appendChild(bars(r.effort,en,3));}
         m.appendChild(el('div','note',t.kind==='claude'?'Stelle das Modell im Claude-Chat um und füge die Aufgabe ein. Relative Eignung laut Jev, keine Erfolgsgarantie.':'Stelle das Modell in Codex um oder nutze den Tab „Ausführen“, der es automatisch setzt.'));
         const cp=el('button',null,'Aufgabe kopieren');cp.onclick=async()=>{try{await navigator.clipboard.writeText($('task').value);cp.textContent='kopiert ✓';}catch{cp.textContent='Kopieren nicht erlaubt';}};m.appendChild(cp);out.appendChild(m);}
       if(r.question){const q=el('div','card');q.appendChild(el('div','head','„'+r.question.text+'“: '+(r.question.yes*100).toFixed(0)+' % ja'));q.appendChild(el('div','note',r.question.yes>0.65?'Jev hält „ja“ für wahrscheinlich.':r.question.yes<0.35?'Jev hält „nein“ für wahrscheinlich.':'Unklar – der Chat zeigt es nicht eindeutig.'));out.appendChild(q);}

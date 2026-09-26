@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { CodexAppServer, resolveCodexBinary } from './codex-app-server.js';
 import { JevPanelSession, isThreadId, type PanelEvent } from './jev-panel-session.js';
 import { PANEL_HTML } from './jev-panel-ui.js';
-import { CLAUDE_MODELS, findClaudeSession, inspectChat, inspectLabels, listClaudeSessions, readClaudeSession, type ModelOption } from './chat-inspect.js';
+import { CLAUDE_MODELS, EFFORTS, findClaudeSession, inspectChat, inspectLabels, listClaudeSessions, readClaudeSession, type ModelOption } from './chat-inspect.js';
 import { gatewayKey } from './jev.js';
 import type { routeModel } from './model-router.js';
 import { describeContext } from './routing-context.js';
@@ -148,8 +148,8 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
           else ({ turns, olderUnread } = await readOnly(s => s.readHistory(input.id)));
           let models: ModelOption[] | undefined;
           if (input.task) models = input.kind === 'claude' ? CLAUDE_MODELS : (await readOnly(s => s.listModels())).map(m => ({ id: m.model, label: m.model.replace('gpt-6-', '').replace(/^./, c => c.toUpperCase()), description: m.description }));
-          const result = await (o.inspect ?? inspectChat)({ turns, olderUnread, question: input.question ?? undefined, task: input.task ?? undefined, models, key: (o.key ?? gatewayKey)(), source: input.kind === 'claude' ? 'Claude Code session' : 'Codex conversation' });
-          return json(res, 200, { ...result, description: result.stats ? describeContext(result.stats) : null, models: models ?? null });
+          const result = await (o.inspect ?? inspectChat)({ turns, olderUnread, question: input.question ?? undefined, task: input.task ?? undefined, models, efforts: input.task && input.kind === 'claude' ? EFFORTS : undefined, key: (o.key ?? gatewayKey)(), source: input.kind === 'claude' ? 'Claude Code session' : 'Codex conversation' });
+          return json(res, 200, { ...result, description: result.stats ? describeContext(result.stats) : null, models: models ?? null, efforts: input.task && input.kind === 'claude' ? EFFORTS : null });
         } finally { inspecting = false; }
       }
       if (url.pathname === '/api/approval') return json(res, session.resolveApproval(String(input.requestId), input.decision === 'accept' ? 'accept' : 'decline') ? 200 : 404, {});
