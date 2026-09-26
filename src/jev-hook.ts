@@ -29,8 +29,18 @@ export function readFocus(stateDir: string): Focus | null {
   const f = readJson(focusFile(stateDir));
   return f && (f.kind === 'claude' || f.kind === 'codex') && SESSION_ID.test(f.id) && Number.isFinite(f.at) ? f : null;
 }
-export const guardEnabled = (stateDir: string) => readJson(join(stateDir, 'guard.json'))?.enabled === true;
-export const setGuard = (stateDir: string, enabled: boolean) => writeJson(join(stateDir, 'guard.json'), { enabled, at: Date.now() });
+// Guard mode is switched on per chat and stays on until switched off.
+export const guardEnabled = (stateDir: string, session: string) => readJson(join(stateDir, 'guard.json'))?.sessions?.[session] === true;
+export function setGuard(stateDir: string, session: string, enabled: boolean) {
+  const file = join(stateDir, 'guard.json'); const state = readJson(file) ?? {};
+  const sessions = { ...(state.sessions ?? {}) };
+  if (enabled) sessions[session] = true; else delete sessions[session];
+  writeJson(file, { sessions });
+}
+/** True when the recommended model is the one the chat already uses. */
+export function sameModel(current: string | null, recommended: string): boolean {
+  return Boolean(current) && modelLabel(current) === modelLabel(recommended);
+}
 
 export type JevCommand = { kind: 'analyze'; task?: string } | { kind: 'question'; question?: string } | { kind: 'guard'; enabled: boolean } | { kind: 'help' };
 export function parseJevCommand(prompt: string): JevCommand | null {
@@ -116,7 +126,13 @@ async function main() {
 
   if (command) {
     if (command.kind === 'help') return block(HELP);
-    if (command.kind === 'guard') { setGuard(stateDir, command.enabled); return block(command.enabled ? 'Jev-Wächter ist AN: Jede neue Nachricht wird zuerst von Jev geprüft (Modell + Effort). Dieselbe Nachricht nochmal senden = abschicken.\nAus mit: #jev aus' : 'Jev-Wächter ist AUS. Nachrichten gehen wieder direkt an Claude.'); }
+    if (command.kind === 'guard') {
+      if (!SESSION_ID.test(session)) return block('Jev-Wächter: Dieser Chat hat keine erkennbare ID – nicht aktiviert.');
+      setGuard(stateDir, session, command.enabled);
+      return block(command.enabled
+        ? 'Jev-Wächter ist für DIESEN Chat AN – du musst ab jetzt kein #jev mehr schreiben.\n• Empfiehlt Jev dasselbe Modell, das du gerade nutzt, geht deine Nachricht sofort durch (mit kurzer Info).\n• Empfiehlt er ein anderes Modell, wird die Nachricht angehalten: Modell/Effort umstellen und dieselbe Nachricht nochmal senden (↑, Enter) – oder einfach nochmal senden, um Jev zu ignorieren.\nAusschalten: #jev aus'
+        : 'Jev-Wächter ist für diesen Chat AUS. Nachrichten gehen wieder direkt an Claude.');
+    }
     try {
       const r = await runJev(event, command.kind === 'question' ? { question: command.question } : { task: command.task });
       return block(formatResult(r, r.stats ? describeContext(r.stats) : null, { current: currentModel(String(event.transcript_path)) }));
@@ -124,7 +140,7 @@ async function main() {
   }
 
   // Guard mode: slash commands and very short replies pass without a Jev call.
-  if (!guardEnabled(stateDir) || prompt.trim().startsWith('/') || prompt.trim().length < 20) return;
+  if (!guardEnabled(stateDir, session) || prompt.trim().startsWith('/') || prompt.trim().length < 20) return;
   const hash = createHash('sha256').update(session + '\0' + prompt.trim()).digest('hex');
   const pendingFile = join(stateDir, 'guard-pending.json');
   const pending = readJson(pendingFile);
@@ -132,8 +148,14 @@ async function main() {
   try {
     const r = await runJev(event, { task: prompt });
     if (!r.ok) { process.stdout.write(JSON.stringify({ systemMessage: `Jev-Wächter: keine Empfehlung (${r.reason}) – Nachricht wurde normal gesendet.` }) + '\n'); return; }
+    const current = currentModel(String(event.transcript_path));
+    if (r.nextModel && sameModel(current, r.nextModel.choice)) {
+      const effort = r.effort ? EFFORTS.find(e => e.id === r.effort!.choice)?.label : null;
+      process.stdout.write(JSON.stringify({ systemMessage: `Jev: ${modelLabel(current)} passt (${pct(r.nextModel.probabilities[r.nextModel.choice])})${effort ? ` · Effort-Tipp: ${effort}` : ''} – Nachricht gesendet.` }) + '\n');
+      return;
+    }
     writeJson(pendingFile, { hash, at: Date.now() });
-    return block(formatResult(r, r.stats ? describeContext(r.stats) : null, { current: currentModel(String(event.transcript_path)), guard: true }));
+    return block(formatResult(r, r.stats ? describeContext(r.stats) : null, { current, guard: true }));
   } catch { /* never hold up the user's work because of Jev */ }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) main().catch(() => {}).finally(() => { process.exitCode = 0; });

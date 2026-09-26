@@ -258,7 +258,7 @@ test('guard mode: first send is held with a recommendation, the identical second
   const dir = await mkdtemp(join(tmpdir(), 'jev-guard-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const env = { ...process.env, JEV_PANEL_HOME: dir, JEV_NO_USER_KEY: '1', AI_GATEWAY_API_KEY: '' };
   const run = (prompt) => spawnSync(process.execPath, ['dist/jev-hook.js'], { input: JSON.stringify({ session_id: '11111111-2222-4333-8444-555555555555', transcript_path: 'tests/fixtures/claude-session.jsonl', prompt }), env, encoding: 'utf8' });
-  assert.match(JSON.parse(run('#jev an').stdout).reason, /Wächter ist AN/);
+  assert.match(JSON.parse(run('#jev an').stdout).reason, /für DIESEN Chat AN/);
   // Without a key Jev cannot answer: the prompt must go through (never blocked), with a visible notice.
   const noKey = JSON.parse(run('Baue bitte einen Parser für CSV-Dateien').stdout);
   assert.equal(noKey.decision, undefined); assert.match(noKey.systemMessage, /JEV_KEY_MISSING.*normal gesendet/);
@@ -266,6 +266,19 @@ test('guard mode: first send is held with a recommendation, the identical second
   assert.equal(run('/compact').stdout, '');
   assert.match(JSON.parse(run('#jev aus').stdout).reason, /AUS/);
   assert.equal(run('Baue bitte einen Parser für CSV-Dateien').stdout, '');
+});
+
+test('guard is per chat and passes immediately when Jev recommends the current model', async (t) => {
+  const { setGuard, guardEnabled, sameModel } = await import('../dist/jev-hook.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-guard2-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const a = '11111111-2222-4333-8444-555555555555', b = '66666666-2222-4333-8444-555555555555';
+  setGuard(dir, a, true);
+  assert.equal(guardEnabled(dir, a), true); assert.equal(guardEnabled(dir, b), false);
+  setGuard(dir, a, false); assert.equal(guardEnabled(dir, a), false);
+  assert.equal(sameModel('claude-opus-5-5', 'claude-opus-5-5'), true);
+  assert.equal(sameModel('claude-haiku-4-5-20251001', 'claude-haiku-4-5-20251001'), true);
+  assert.equal(sameModel('claude-opus-5-5', 'claude-sonnet-5'), false);
+  assert.equal(sameModel(null, 'claude-sonnet-5'), false);
 });
 
 test('guard formatting shows model, effort, current model and how to continue', async () => {
