@@ -51,7 +51,7 @@ textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
   <div class="row" style="margin-top:6px"><span class="hint grow" id="hint">Enter sendet · Umschalt+Enter neue Zeile</span><button id="stop" hidden>Stopp</button><button id="send" class="primary">Senden</button></div>
 </footer></div>
 <div class="view" id="ask" hidden><main>
-  <div class="card"><div class="row"><div class="grow"><div class="note" style="margin:0">Aktueller Chat (zuletzt aktiv)</div><div id="curTitle" style="font-weight:600">–</div><div class="note" style="margin:0" id="curMeta"></div></div><button id="analyzeBtn" class="primary">Analysieren</button></div>
+  <div class="card"><div class="row"><div class="grow"><div class="note" style="margin:0">Aktueller Chat</div><div id="curTitle" style="font-weight:600">–</div><div class="note" style="margin:0" id="curMeta"></div></div><button id="analyzeBtn" class="primary">Analysieren</button></div>
     <details style="margin-top:6px"><summary>anderen Chat wählen</summary><select id="source" style="width:100%;margin-top:4px"></select></details></div>
   <div id="analysis" style="display:flex;flex-direction:column;gap:8px"></div>
   <label class="field">Nächste Aufgabe – Jev schlägt das Modell vor (nichts wird ausgeführt)<textarea id="task" style="min-height:70px" placeholder="Was soll als Nächstes passieren?"></textarea></label>
@@ -141,7 +141,7 @@ function showView(ask){$('run').hidden=ask;$('ask').hidden=!ask;$('tabRun').clas
 $('tabRun').onclick=()=>showView(false);$('tabAsk').onclick=()=>showView(true);
 const ago=ms=>{const s=Math.max(0,Math.round(ms/1000));return s<60?'vor '+s+' s':s<3600?'vor '+Math.round(s/60)+' min':'vor '+Math.round(s/3600)+' h';};
 const target=()=>picked||cur;
-function showTarget(){const t=target();$('curTitle').textContent=t?t.title:'kein Chat gefunden';$('curMeta').textContent=t?(t.kind==='claude'?'Claude Code':'Codex')+(t.updatedAt?' · '+ago(Date.now()-t.updatedAt):'')+(picked?' · manuell gewählt':''):'';}
+function showTarget(){const t=target();$('curTitle').textContent=t?t.title:'kein Chat gefunden';$('curMeta').textContent=t?(t.kind==='claude'?'Claude Code':'Codex')+(picked?' · manuell gewählt':t.via==='typed'?' · hier hast du zuletzt geschrieben ('+ago(Date.now()-t.typedAt)+')':' · zuletzt aktualisiert '+ago(Date.now()-t.updatedAt)+' (Hook noch nicht aktiv)'):'';}
 async function refreshCurrent(){try{const r=await api('/api/current');const c=r.current;
   if(c&&cur&&c.id===cur.id&&c.updatedAt!==cur.updatedAt){seenUpdate=c.updatedAt;stableSince=Date.now();}
   cur=c;showTarget();

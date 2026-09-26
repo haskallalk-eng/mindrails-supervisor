@@ -222,3 +222,29 @@ test('next-task model suggestion uses the highest probability among the offered 
   const noTask = await inspectChat({ ...input, task: '' }, async (_u, o) => { assert.ok(!JSON.parse(o.body).questions.next_model); return new Response(JSON.stringify({ answers: base, usage: { input_tokens: 1, output_tokens: 1 } })); });
   assert.equal(noTask.nextModel, null);
 });
+
+test('prompt hook: #jev commands are recognized, normal prompts are not; focus round-trips', async (t) => {
+  const { parseJevCommand, writeFocus, readFocus, formatResult } = await import('../dist/jev-hook.js');
+  assert.equal(parseJevCommand('Mach weiter'), null);
+  assert.equal(parseJevCommand('Bitte #jev nutzen'), null);
+  assert.deepEqual(parseJevCommand('#jev'), { task: undefined });
+  assert.deepEqual(parseJevCommand('  #JEV  Baue Tests '), { task: 'Baue Tests' });
+  assert.deepEqual(parseJevCommand('#jev? Sind die Tests grün?'), { question: 'Sind die Tests grün?' });
+  const dir = await mkdtemp(join(tmpdir(), 'jev-focus-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  assert.equal(readFocus(dir), null);
+  writeFocus(dir, { kind: 'claude', id: '11111111-2222-4333-8444-555555555555', at: 5 });
+  assert.equal(readFocus(dir).id, '11111111-2222-4333-8444-555555555555');
+  assert.match(formatResult({ ok: false, reason: 'JEV_HTTP_503', stats: null }, null), /JEV_HTTP_503.*Keine Werte erfunden/);
+});
+
+test('prompt hook process: normal prompt passes silently and records focus; #jev without key is blocked with a reason', async (t) => {
+  const { spawnSync } = await import('node:child_process');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-hookproc-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, JEV_PANEL_HOME: dir, AI_GATEWAY_API_KEY: '', JEV_NO_USER_KEY: '1' };
+  const ev = prompt => JSON.stringify({ session_id: '11111111-2222-4333-8444-555555555555', transcript_path: 'tests/fixtures/claude-session.jsonl', prompt });
+  const normal = spawnSync(process.execPath, ['dist/jev-hook.js'], { input: ev('Mach weiter'), env, encoding: 'utf8' });
+  assert.equal(normal.status, 0); assert.equal(normal.stdout, '');
+  assert.equal(JSON.parse(await readFile(join(dir, 'focus.json'), 'utf8')).kind, 'claude');
+  const cmd = spawnSync(process.execPath, ['dist/jev-hook.js'], { input: ev('#jev'), env, encoding: 'utf8' });
+  const out = JSON.parse(cmd.stdout); assert.equal(out.decision, 'block'); assert.match(out.reason, /JEV_KEY_MISSING/);
+});

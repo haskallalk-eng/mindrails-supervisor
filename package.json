@@ -32,7 +32,8 @@
   "bin": {
     "mindrails-supervisor": "dist/cli.js",
     "jev": "dist/jev.js",
-    "jev-panel": "dist/jev-panel.js"
+    "jev-panel": "dist/jev-panel.js",
+    "jev-hook": "dist/jev-hook.js"
   },
   "files": [
     "dist",

@@ -11,7 +11,7 @@ import { resolveCodexBinary } from './codex-app-server.js';
 
 export function gatewayKey():string|undefined {
   if(process.env.AI_GATEWAY_API_KEY)return process.env.AI_GATEWAY_API_KEY;
-  if(process.platform==='win32')try {
+  if(process.platform==='win32'&&!process.env.JEV_NO_USER_KEY)try {
     // Only the explicitly configured gateway key; never enumerate other credentials.
     return execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"[Environment]::GetEnvironmentVariable('AI_GATEWAY_API_KEY','User')"],{encoding:'utf8',timeout:3000,windowsHide:true,stdio:['ignore','pipe','ignore']}).trim()||undefined;
   }catch{}

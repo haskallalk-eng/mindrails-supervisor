@@ -43,3 +43,12 @@ Pick a Claude Code session (read from `~/.claude/projects/*/<id>.jsonl`) or a Co
 ### Assistant tab
 
 The default *Assistent* tab targets the **most recently updated** Claude Code session or Codex conversation (the panel cannot see which window you are looking at; you can pick another chat). *Analysieren* returns progress, obstacle and next step in one line. Type the next task and press *Modell vorschlagen*: Jev picks among Opus 5.5 / Sonnet 5 / Haiku 4.5 for Claude chats (Fable 5.1 is not offered because its intended use is not documented here) or the Codex catalog models, using the chat as context; nothing is executed and the switch is up to you (*Aufgabe kopieren* copies the task). Optional auto mode analyzes the current chat once it has been unchanged for 20 s after an update, at most every two minutes; each run is a paid Jev call. Keep one panel tab open: every tab holds a live connection and browsers allow only six per address.
+
+### Knowing which chat you are in: prompt hooks and `#jev`
+
+The panel cannot see which window is focused. Instead, prompt hooks record the chat you last typed in (`%LOCALAPPDATA%\mindrails-jev\focus.json`: kind, id, time, cwd — no prompt text), and the *Assistent* tab uses it (“hier hast du zuletzt geschrieben”), falling back to the most recently updated chat.
+
+- Claude Code: `~/.claude/settings.json` → `hooks.UserPromptSubmit` runs `node <repo>/dist/jev-hook.js` (exec form, 30 s timeout). Normal prompts pass unchanged (~0.25 s). `#jev` analyzes the current chat, `#jev <task>` also recommends Opus/Sonnet/Haiku for that task, `#jev? <question>` answers a yes/no question. These commands are blocked before reaching Claude (no Claude tokens) and Jev's answer is shown as the block reason. Each is one paid Jev call.
+- Codex: the `jev-chat-review` plugin adds `hooks/jev-focus.mjs` to `UserPromptSubmit` (async, id only). The installed plugin copy under `~/.codex/plugins/cache/local-jev-dev/…` must contain it; Codex loads hooks at start.
+
+Computer use is not used for this: it would need screen access every time, is slow, and the panel cannot invoke Claude anyway.

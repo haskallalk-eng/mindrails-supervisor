@@ -13,6 +13,7 @@ import { CLAUDE_MODELS, findClaudeSession, inspectChat, inspectLabels, listClaud
 import { gatewayKey } from './jev.js';
 import type { routeModel } from './model-router.js';
 import { describeContext } from './routing-context.js';
+import { readFocus } from './jev-hook.js';
 
 export type PanelOptions = {
   codex: string[]; cwd: string; threadId?: string | null; write: boolean; port: number; stateDir: string;
@@ -113,7 +114,16 @@ export async function startPanel(o: PanelOptions): Promise<{ server: Server; url
         const codexList = await readOnly(s => s.call('thread/list', { limit: 1, sortKey: 'updated_at', useStateDbOnly: true })).catch(() => ({ data: [] }));
         const t = codexList.data?.[0];
         const codex = t ? { kind: 'codex', id: t.id, title: t.name || String(t.preview ?? '').slice(0, 80) || t.id, updatedAt: (t.updatedAt ?? 0) * 1000 } : null;
-        const current = [claude, codex].filter(Boolean).sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0] ?? null;
+        let current: any = [claude, codex].filter(Boolean).sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0] ?? null;
+        if (current) current.via = 'updated';
+        // Preferred: the chat you last typed in, reported by the Claude Code / Codex prompt hooks.
+        const focus = readFocus(o.stateDir);
+        if (focus && Date.now() - focus.at < 12 * 3600_000) {
+          let title: string | null = null, updatedAt = focus.at;
+          if (focus.kind === 'claude') { const s = listClaudeSessions(undefined, 60).find(x => x.id === focus.id); title = s?.title ?? null; updatedAt = s?.updatedAt ?? focus.at; }
+          else { const t = await readOnly(s => s.call('thread/read', { threadId: focus.id, includeTurns: false })).catch(() => null); title = t?.thread?.name || t?.thread?.preview || null; updatedAt = (t?.thread?.updatedAt ?? 0) * 1000 || focus.at; }
+          current = { kind: focus.kind, id: focus.id, title: title ?? focus.id, updatedAt, typedAt: focus.at, via: 'typed' };
+        }
         return json(res, 200, { current, now: Date.now() });
       }
       if (req.method !== 'POST') return json(res, 405, { error: 'METHOD' });
