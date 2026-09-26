@@ -3,7 +3,8 @@
   "version": "0.2.0",
   "description": "Local MCP completion gates and loop detection for AI agents, with optional Jev evaluation. By Mindrails.",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:codex-plugin && npm run build:jev-plugins",
+    "build:codex-plugin": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node24 --outfile=plugins/jev-chat-review/server.mjs && esbuild plugins/jev-chat-review/hooks/review-stop.ts --bundle --platform=node --format=esm --target=node24 --outfile=plugins/jev-chat-review/hooks/review-stop.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "demo": "node dist/cli.js demo",
@@ -11,7 +12,9 @@
     "evidence": "node evidence/run.mjs",
     "jev:suite:dry-run": "node evidence/jev-live-suite.mjs",
     "jev:heldout:dry-run": "node evidence/jev-heldout-suite.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "build:jev-plugins": "esbuild src/jev-hook.ts --bundle --platform=node --format=esm --target=node20 --outfile=plugins/jev-claude/hooks/jev-guard.mjs && esbuild src/jev-hook.ts --bundle --platform=node --format=esm --target=node20 --outfile=plugins/jev-codex/hooks/jev-guard.mjs && node scripts/build-jev-skills.mjs",
+    "spectrum": "node scripts/build-model-spectrum.mjs data/spectrum-claims --out src/model-spectrum.ts --md docs/model-spectrum.md"
   },
   "keywords": [],
   "author": "",
@@ -24,24 +27,33 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "24.13.6",
+    "esbuild": "^0.28.2",
     "typescript": "7.0.2"
   },
   "private": true,
   "bin": {
-    "mindrails-supervisor": "dist/cli.js"
+    "mindrails-supervisor": "dist/cli.js",
+    "jev": "dist/jev.js",
+    "jev-panel": "dist/jev-panel.js",
+    "jev-hook": "dist/jev-hook.js"
   },
   "files": [
-    "dist",
-    "examples",
-    "docs",
-    "evidence",
-    "README.md",
+    ".agents",
+    ".claude-plugin",
+    ".env.example",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
     "LICENSE",
     "NOTICE",
+    "README.md",
     "SECURITY.md",
-    "CONTRIBUTING.md",
-    "CHANGELOG.md",
-    ".env.example"
+    "dist",
+    "docs",
+    "evidence",
+    "examples",
+    "plugins/jev-chat-review",
+    "plugins/jev-claude",
+    "plugins/jev-codex"
   ],
   "repository": {
     "type": "git",

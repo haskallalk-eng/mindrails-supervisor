@@ -1,10 +1,56 @@
 # Mindrails Supervisor
 
+## Jev – die richtige KI-Modellwahl vor jeder Aufgabe (Claude Code & Codex)
+
+Jev ordnet jede neue Aufgabe ein (Coding, Agent/Terminal, Denken, Recherche, einfach; leicht/normal/schwer). Eine feste Regel wählt daraus das Modell anhand veröffentlichter Benchmarks und gewichteter Erfahrungswerte; den Effort wählt Jev pro Modell (nur Stufen, die das Modell in der App wirklich hat). **In Claude Code stellt Jev den Effort für jede Nachricht selbst ein, ein Modellwechsel braucht einen Klick („Jev folgen“).** Ein anderes Modell schlägt Jev nur vor, wenn es **klar** besser ist (≥ 4 Benchmark-Punkte) oder bei gleicher Qualität **mindestens 25 % günstiger**. Codex bietet dafür keine Schnittstelle: Dort hält Jev die Nachricht einmal an.
+
+**Installieren (Claude Code):**
+
+```sh
+claude plugin marketplace add haskallalk-eng/mindrails-supervisor
+claude plugin install jev@mindrails
+```
+
+**Installieren (Codex):**
+
+```sh
+codex plugin marketplace add haskallalk-eng/mindrails-supervisor --ref main
+codex plugin add jev@mindrails
+```
+
+Voraussetzungen: Node.js ≥ 20 im PATH und ein Vercel-AI-Gateway-Schlüssel als Umgebungsvariable `AI_GATEWAY_API_KEY` (Windows: `setx AI_GATEWAY_API_KEY "…"`, danach App neu starten). Chat-Auszüge gehen an Jev (Vercel AI Gateway / TypeSafe) und können Kosten verursachen. Bis der Branch in `main` ist: Claude `claude plugin marketplace add "https://github.com/haskallalk-eng/mindrails-supervisor.git#ux/codex-chat-review"`, Codex `--ref ux/codex-chat-review` (beides getestet).
+
+**Benutzen – im Chat tippen:**
+
+| Eingabe | Wirkung |
+|---|---|
+| `#jev an` | Jev für diesen Chat einschalten (einmal) – danach läuft Jev bei jeder Nachricht automatisch |
+| `#jev aus` | Jev für diesen Chat ausschalten |
+| `#jev status` | Was Jev eingestellt hat und worauf die letzte Nachricht wirklich lief |
+| `#jev` | Chat analysieren (Fortschritt, Hindernis, nächster Schritt) |
+| `#jev <Aufgabe>` | Modell + Effort für eine Aufgabe empfehlen |
+| `#jev? <Frage>` | Ja/Nein-Frage zum Chat, Antwort in % |
+| `#jev hilfe` | Befehle anzeigen |
+
+**Claude Code:** Bevor Claude arbeitet, ruft es einen Jev-Skill auf (`jev:effort-…`, `jev:model-…`). Der stellt Effort oder Modell für den Rest dieser Nachricht um, das Modellmenü selbst bleibt unverändert. Bei einem Modellwechsel fragt Claude einmal nach: Ein Klick auf „Jev folgen“ stellt um, danach bleibt der Chat auf diesem Modell. Die erste Antwort jeder Nachricht läuft noch mit der Menü-Einstellung, weil sie nur den Skill aufruft. Wer ein Jev-Modell dauerhaft nutzt, stellt es am besten auch im Menü ein, dann entfällt dieser Zwischenschritt. `#jev status` zeigt, worauf die letzte Nachricht tatsächlich lief.
+
+**Codex:** Wird eine Nachricht angehalten, Modell und Effort im Modellmenü umstellen und **dieselbe Nachricht nochmal senden** (↑, Enter). Wer Jev ignorieren will, sendet sie einfach direkt nochmal. Details, Benchmark-Quellen und Grenzen: [docs/model-routing.md](docs/model-routing.md).
+
+---
+
 A local MCP completion gate for AI agents, with optional Jev judgments and deterministic policies.
 
 An independent open-source project by [Mindrails](https://mindrails.de).
 
+**New: route before execution.** The separate local `jev` command asks Jev to choose between the available GPT-6 Astra, Sol and Luna models, then starts Codex with the highest-probability model. Run `npm run build`, `npm link`, then `jev --workspace-write` in your project. Each input is routed before execution; subsequent inputs include visible conversation history. New: `jev-panel` serves a small side panel (open it in Codex's in-app browser) that routes and continues a chosen conversation, with long-history selection, visible probabilities and approvals. This does **not** intercept the Codex desktop chat composer, and it cannot write to a conversation while the Codex app has it open. See [setup, failure behavior and limitations](docs/model-routing.md). This preflight argmax policy is separate from the plugin's advisory uncertainty policy below.
+
 Check explicit requirements before an agent stops, and flag repeated steps. The host remains responsible for verification, permissions and execution.
+
+**Jev recovery advice:** the optional Codex review now asks three additional focused questions in the same request: is the current work advancing, what is the dominant unresolved obstacle, and what next step fits? When the answers agree with sufficient confidence and selected probability, Mindrails presents a prepared follow-up prompt: resolve a prerequisite, ask for a missing decision, change approach, verify the result, or correct a missed requirement. Productive work gets no recovery interruption. Conflicts and uncertainty produce no action prompt; an environment blocker suppresses a contradictory model-upgrade suggestion. Jev classifies; application code selects the fixed wording. Prompts are never dispatched automatically.
+
+See [the Jev-specific product comparison and validation plan](docs/jev-product-direction.md). This is a development preview; uniqueness, productivity gains and semantic accuracy have not been established.
+
+**Uncertainty policy:** an unclear intervention preserves the host's normal path (`CONTINUE_BASELINE` / recovery `action: none`) without confirming completion. An uncertain downgrade keeps the current model; a plausible but uncertain upgrade prefers stronger-model advice under a documented quality-first rule. Fallback advice is labeled as product policy, not a confident Jev diagnosis. Clearly identified prerequisites override model changes, and clear failures remain visible. The plugin does not automatically interrupt, restart or switch a task.
 
 ## Try the free offline demo
 
@@ -48,9 +94,9 @@ For a direct check, select the provider explicitly. Unix: `MINDRAILS_PROVIDER=mo
 | --- | --- | --- |
 | `check_completion` | task, currentResult, 1–20 unique requirements; optional evidence, evidenceMode and trustedChecks | finish / continue / review, reason codes, missing requirement IDs, raw model signals and provenance |
 | `detect_stuck` | Up to 50 caller-supplied action/input/result/progress steps; optional `allowedExtraRepetitions` from 0–2 | At least three trailing repetitions of a one-to-three-step cycle, with zero-based matched indices |
-| `triage_agent_run` | task, instructions, up to 30 transcript turns, up to 20 tool calls, final message, optional user feedback and action permission claims | AUTO_CLOSE / HUMAN_REVIEW / PRIORITY_REVIEW / FILE_ISSUE / ROUTE_PAGE_ON_CALL, reason codes, Jev labels, provider and confidence |
+| `triage_agent_run` | task, instructions, up to 120 transcript turns, up to 50 tool calls, final message, optional feedback/action claims and current model plus Codex usage telemetry | CONTINUE_BASELINE / AUTO_CLOSE / HUMAN_REVIEW / PRIORITY_REVIEW / FILE_ISSUE / ROUTE_PAGE_ON_CALL, reason codes, labels, provider usage, and (when current model is known) a confidence-rated keep/upgrade/faster/uncertain model-fit direction |
 
-Trace triage asks Jev three fixed-choice questions: whether the task appears complete, whether the user explicitly accepts or rejects the result, and whether the run is healthy, misses expectations, overtly fails, or claims success without support. A deterministic policy maps those labels to a recommendation. Low confidence, uncertainty, incomplete work, dissatisfaction, or an expectation gap go to human review; a silent failure is prioritized; a clear failure is recommended for issue filing. Caller-reported unpermitted actions bypass Jev and are recommended for on-call review. These labels are initial heuristics, not validated production thresholds. Recommendations are advisory and never run tools, close work, create issues, page anyone, or authorize actions.
+Trace triage asks Jev three fixed-choice questions: whether the task appears complete, whether the user explicitly accepts or rejects the result, and whether the run is healthy, misses expectations, overtly fails, or claims success without support. A deterministic policy maps those labels to a recommendation. Low confidence or uncertainty preserve the baseline without certifying success; clear dissatisfaction or an expectation gap warrant review; a silent failure is prioritized; a clear failure is recommended for issue filing. Caller-reported unpermitted actions bypass Jev and are recommended for on-call review. These labels are initial heuristics, not validated production thresholds. Recommendations are advisory and never run tools, close work, create issues, page anyone, or authorize actions.
 
 The trace, transcript, tool arguments and results are caller supplied and treated as untrusted data. Permission claims are not independently verified. Mock mode uses explicit `[mock:...]` markers only and is synthetic; it does not assess real traces.
 
@@ -75,6 +121,12 @@ Tested: official `@modelcontextprotocol/client` 2.0.0 over stdio. The following 
 ```
 
 On Windows use your absolute path with JSON-escaped backslashes. MCP results advise the host; this server cannot force it to continue, execute tools or switch its internal model.
+
+## Automatic Jev review for Codex (local plugin preview)
+
+The `plugins/jev-chat-review` package also monitors open Codex chats locally. Ask Jev to open the `open_codex_chats` overview for session status, elapsed time, repeated identical tool-call warnings, latest request token/context usage, and available Codex rate-limit pressure. Local monitoring stores derived signals only and makes no AI/API calls. At the end of a turn, the optional Jev review sends the bounded visible transcript, tool activity, current model, and usage evidence to Vercel AI Gateway. Jev then gives a confidence-rated model-fit direction when the current model is known: keep it, try a more capable model, try a faster model for comparable low-risk work, or uncertain. This advice does not change the selected model or claim measured cost savings. The feature requires `AI_GATEWAY_API_KEY` and may incur charges. Local defaults cap use at 20 reviews and 350,000 trace bytes per UTC day, with duplicate invocations skipped. These limits reduce usage but do not guarantee a fixed dollar maximum. A Jev request can delay the end of a turn by up to eight seconds. Results are advisory; Jev never continues or closes work, creates issues, pages anyone, or takes actions. Codex has no supported persistent plugin icon/panel for this use case, and the monitor has no timer that interrupts a still-running tool. Set `MINDRAILS_JEV_AUTO_REVIEW=0` or disable the plugin to stop reviews.
+
+The hook reads Codex's local transcript, redacts common credential patterns, and sends the trace to Vercel AI Gateway. This is not a guarantee that every secret or personal detail is detected. Codex's transcript format is not a stable interface. Oversized traces are reported as unreviewed instead of silently truncated. This is a local integration preview, not a published one-click install. See [`plugins/jev-chat-review/README.md`](plugins/jev-chat-review/README.md) for setup, data handling, and limits.
 
 ## Optional Jev mode (BYOK)
 

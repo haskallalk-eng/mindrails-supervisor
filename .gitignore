@@ -1,5 +1,7 @@
 node_modules/
 dist/
+plugins/jev-chat-review/server.mjs
+plugins/jev-chat-review/hooks/review-stop.mjs
 *.tgz
 .env
 .env.*

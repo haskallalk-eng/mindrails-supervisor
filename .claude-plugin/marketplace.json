@@ -1,0 +1,14 @@
+{
+  "name": "mindrails",
+  "owner": {
+    "name": "Mindrails",
+    "url": "https://mindrails.de"
+  },
+  "plugins": [
+    {
+      "name": "jev",
+      "source": "./plugins/jev-claude",
+      "description": "Model and effort per task from benchmarks: effort set automatically per message, model switch with one click."
+    }
+  ]
+}

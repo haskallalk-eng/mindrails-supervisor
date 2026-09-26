@@ -2,6 +2,24 @@
 
 ## Unreleased — local Jev calibration update
 
+- Claude Code: Jev sets the effort for every message itself and switches the model with one click ("Jev folgen"). This works through ten plugin skills whose `model`/`effort` frontmatter applies to the rest of the message. The next prompt checks in the transcript what really ran; `#jev status` shows it. Codex keeps the hold-and-resend flow because it has no override interface. Plugins 0.5.0.
+
+- Weighted practitioner/user model spectrum (668 model/task and 171 effort statements; credibility × quality × recency weighting) in `src/model-spectrum.ts`, rebuilt by `npm run spectrum`: vetoes benchmark picks that credible voices rate weak for the task, decides where no benchmark exists, and sets effort per model (plugins 0.4.0).
+
+- Jev plugins for Claude Code (`plugins/jev-claude`) and Codex (`plugins/jev-codex`), installable from this repo's marketplaces; one self-contained hook bundle, no build step.
+- Benchmark-based model policy (`src/model-policy.ts`, `src/model-benchmarks.ts` with sources): Jev classifies task kind and difficulty; switches only for a 4+ point gap or a 25%+ saving at equal quality.
+- Codex support: rollout reader, current model and effort from the conversation, tiers and exact effort ids from the local Codex model catalog.
+- Exact effort ids and app labels (Niedrig/Mittel/Hoch/Extra hoch/Max, Codex `ultra`); no effort for Haiku 4.5.
+
+- Add `jev-panel`: loopback side panel that routes each message with Jev and runs it in the same Codex conversation via `codex app-server` (explicit model/effort per turn, streaming, user-answered approvals, stop, explicit fork).
+- Prevent double submits and parallel runs (UI, HTTP 409, message de-duplication, cross-process lock); respect Codex's single-writer lock instead of writing to conversations open in the Codex app.
+- Replace the 64 KB fallback for long conversations with a paginated, labeled selection of recent turns, constraints/decisions/problems and older-turn digests; use the conversation's current model as baseline.
+- Add a *Fragen* tab: Jev reads a Claude Code session or Codex conversation and returns progress, obstacle, next step and the probability for a user yes/no question.
+- Auto-detect the Codex desktop's bundled CLI when `codex` is not on PATH.
+
+- Add an automatic Codex turn review with plain-language German guidance and visible provider token usage.
+- Add a persistent per-install daily call/trace-byte budget, duplicate suppression, local usage accounting, and no-transcript-storage state.
+- Disclose repeat transmission of conversation history, provider charges, redaction limits, and the lack of a managed Mindrails inference service.
 - Separate artifact completion from explicit source-backed `fact-check` mode; only fact-check mode hard-gates on supplied evidence.
 - Adjust the initial signal threshold from 0.90 to 0.85 based on the five false continues in the first frozen Jev suite.
 - Re-run the same twelve synthetic cases through Vercel Jev: 12/12 correct, no false finishes, false continues or provider errors; document that this tuned set is not held-out validation.
