@@ -295,7 +295,8 @@ test('recommendation text shows task, model, benchmark reason, exact effort and 
   assert.match(text, /Aufgabe: Coding · normal/);
   assert.match(text, /Modell:  Opus 5.5   \(aktuell: Fable 5.1\)/);
   assert.match(text, /FrontierCode v1.1 Main \(Herstellerangaben\): Opus 5.5 54,4 · Fable 5.1 50,3/);
-  assert.match(text, /Effort:  Extra hoch \(xhigh\)/);
+  // Effort comes from the weighted evidence for THIS model (Opus 5.5: medium), not from Jev's generic pick (xhigh).
+  assert.match(text, /Effort:  Mittel \(medium\).*\[Erfahrungswert für dieses Modell\]/);
   assert.doesNotMatch(text, /sehr hoch/);
   assert.match(text, /dieselbe Nachricht nochmal senden/);
 });
@@ -310,9 +311,9 @@ test('benchmark policy: small gaps never switch, clear gaps and big savings do',
   assert.deepEqual([f.recommended, f.interrupt], ['claude-opus-5-5', true]);
   // Coding on Opus 5.5: already best -> stay.
   assert.equal(decideModel({ kind: 'coding', difficulty: 'hard', current: 'claude-opus-5-5', candidates: claude }).interrupt, false);
-  // Codex coding on Sol (49.3) vs Astra (53.3): exactly 4 points -> reaches the threshold, switch.
+  // Codex coding on Sol: Astra leads by 4 points AND Sol is rated weak for coding by credible voices -> switch.
   const s = decideModel({ kind: 'coding', difficulty: 'hard', current: 'gpt-6-sol', candidates: codex });
-  assert.deepEqual([s.recommended, s.interrupt, s.reason], ['gpt-6-astra', true, 'quality-gap']);
+  assert.deepEqual([s.recommended, s.interrupt, s.reason], ['gpt-6-astra', true, 'current-vetoed']);
   // Opus 5 (48.0) vs Fable 5.1 (50.3) on hard coding: 2.3 points -> below threshold, stay.
   const u = decideModel({ kind: 'coding', difficulty: 'hard', current: 'claude-opus-5', candidates: ['claude-opus-5', 'claude-fable-5-1'] });
   assert.deepEqual([u.recommended, u.interrupt, u.reason], ['claude-fable-5-1', false, 'gap-below-threshold']);
@@ -327,8 +328,8 @@ test('benchmark policy: small gaps never switch, clear gaps and big savings do',
   // Simple task on Opus 5.5 -> Haiku (75 % cheaper); on Haiku -> stay.
   assert.deepEqual([decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-opus-5-5', candidates: claude }).recommended, decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-opus-5-5', candidates: claude }).interrupt], ['claude-haiku-4-5', true]);
   assert.equal(decideModel({ kind: 'simple', difficulty: 'easy', current: 'claude-haiku-4-5-20251001', candidates: claude }).interrupt, false);
-  // No published comparable score (Sonnet 5 on coding, Opus 4.7) -> no benchmark decision.
-  assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-sonnet-5', candidates: claude }).basis, 'none');
+  // No published comparable benchmark for Sonnet 5 -> the weighted spectrum decides; Opus 4.7 has neither -> none.
+  assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-sonnet-5', candidates: claude }).basis, 'spectrum');
   assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-opus-4-7', candidates: claude }).basis, 'none');
   // Settings alias resolves.
   assert.equal(decideModel({ kind: 'coding', difficulty: 'normal', current: 'fable[1m]', candidates: claude }).recommended, 'claude-opus-5-5');
@@ -388,4 +389,29 @@ test('guard threshold: never within a tier, only for a clear tier difference', a
   assert.equal(guardDecision(null, p(0, 0, 0, 1)).reason, 'unknown-current');
   // Settings aliases are understood.
   assert.equal(guardDecision('fable[1m]', p(1, 0, 0, 0)).reason, 'same-tier');
+});
+
+test('weighted spectrum: veto on benchmark picks, fallback where no benchmark exists, per-model effort', async () => {
+  const { decideModel, spectrumEffort, spectrumKey, vetoed } = await import('../dist/model-policy.js');
+  const claude = ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'];
+  const codex = ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol'];
+  assert.equal(spectrumKey('gpt-5.6-sol'), 'gpt-5-6-sol');
+  assert.equal(spectrumKey('claude-haiku-4-5-20251001'), 'claude-haiku-4-5');
+  assert.equal(spectrumKey('fable[1m]'), 'claude-fable-5-1');
+  // GPT-6 Sol is rated weak for research by many credible voices: never recommended there.
+  assert.equal(vetoed('gpt-6-sol', 'research'), true);
+  const r = decideModel({ kind: 'research', difficulty: 'easy', current: 'gpt-6-astra', candidates: codex });
+  assert.notEqual(r.recommended, 'gpt-6-sol'); assert.ok(r.vetoedModels.includes('gpt-6-sol'));
+  // Sonnet 5 has no comparable research benchmark: the spectrum decides (Opus 5.5 well ahead -> switch).
+  const sp = decideModel({ kind: 'research', difficulty: 'normal', current: 'claude-sonnet-5', candidates: claude });
+  assert.deepEqual([sp.basis, sp.recommended, sp.interrupt, sp.reason], ['spectrum', 'claude-opus-5-5', true, 'spectrum-gap']);
+  // Sonnet 5 coding: Opus 5.5 is rated higher but by less than 30 points -> no interruption.
+  const sc = decideModel({ kind: 'coding', difficulty: 'normal', current: 'claude-sonnet-5', candidates: claude });
+  assert.deepEqual([sc.basis, sc.interrupt], ['spectrum', false]);
+  // Effort differs per model.
+  assert.equal(spectrumEffort('claude-opus-5-5', 'coding').effort, 'medium');
+  assert.equal(spectrumEffort('claude-fable-5-1', 'coding').effort, 'xhigh');
+  assert.equal(spectrumEffort('claude-fable-5-1', 'coding').avoidFrom, 'max');
+  assert.equal(spectrumEffort('gpt-6-astra', 'agentic').effort, 'medium');
+  assert.equal(spectrumEffort('claude-haiku-4-5-20251001', 'simple'), null);
 });

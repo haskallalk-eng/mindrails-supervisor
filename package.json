@@ -13,7 +13,8 @@
     "jev:suite:dry-run": "node evidence/jev-live-suite.mjs",
     "jev:heldout:dry-run": "node evidence/jev-heldout-suite.mjs",
     "prepack": "npm run build",
-    "build:jev-plugins": "esbuild src/jev-hook.ts --bundle --platform=node --format=esm --target=node20 --outfile=plugins/jev-claude/hooks/jev-guard.mjs && esbuild src/jev-hook.ts --bundle --platform=node --format=esm --target=node20 --outfile=plugins/jev-codex/hooks/jev-guard.mjs"
+    "build:jev-plugins": "esbuild src/jev-hook.ts --bundle --platform=node --format=esm --target=node20 --outfile=plugins/jev-claude/hooks/jev-guard.mjs && esbuild src/jev-hook.ts --bundle --platform=node --format=esm --target=node20 --outfile=plugins/jev-codex/hooks/jev-guard.mjs",
+    "spectrum": "node scripts/build-model-spectrum.mjs data/spectrum-claims --out src/model-spectrum.ts --md docs/model-spectrum.md"
   },
   "keywords": [],
   "author": "",

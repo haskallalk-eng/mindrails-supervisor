@@ -14,7 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { CLAUDE_TIERS, EFFORTS, codexTiers, effortLabel, guardDecision, inspectChat, inspectLabels, modelDisplay, pickEffort, readClaudeSession, tierOf, type InspectResult, type ModelTier } from './chat-inspect.js';
 import { codexTurnSettings, findCodexRollout, readCodexCatalog, readCodexRollout } from './codex-rollout.js';
 import { BENCHMARKS, BENCHMARKS_AS_OF, MODEL_FACTS, modelKey } from './model-benchmarks.js';
-import { DIFFICULTIES, MIN_SAVING, MIN_SWITCH_POINTS, TASK_KINDS, TOLERANCE, decideModel, type PolicyResult } from './model-policy.js';
+import { DIFFICULTIES, MIN_SAVING, MIN_SWITCH_POINTS, SPECTRUM_MIN_GAP, TASK_KINDS, TOLERANCE, decideModel, spectrumEffort, type PolicyResult } from './model-policy.js';
 import { describeContext, type HistoryTurn } from './routing-context.js';
 import { gatewayKey } from './gateway-key.js';
 import { stateDirectory } from './state-dir.js';
@@ -105,8 +105,9 @@ export function codexProfile(event: any): AppProfile {
 
 // ---------- recommendation ----------
 export type Recommendation = {
-  model: string | null; interrupt: boolean; why: string; basis: 'benchmark' | 'simple' | 'tier';
-  effort: string | null; currentEffort: string | null; current: string | null; policy: PolicyResult | null;
+  model: string | null; interrupt: boolean; why: string; basis: 'benchmark' | 'simple' | 'spectrum' | 'tier';
+  effort: string | null; effortSource: 'erfahrung' | 'jev' | null; effortAvoidFrom: string | null;
+  currentEffort: string | null; current: string | null; policy: PolicyResult | null;
 };
 const pct = (p: number | undefined) => `${Math.round((p ?? 0) * 100)} %`;
 const num = (n: number) => n.toFixed(1).replace('.', ',');
@@ -124,11 +125,20 @@ export function recommend(r: Extract<InspectResult, { ok: true }>, app: AppProfi
     const b = BENCHMARKS[policy.benchmark];
     const list = policy.scores.slice(0, 4).map(s => `${app.display(s.model)} ${num(s.score)}`).join(' · ');
     const tol = TOLERANCE[r.difficulty!.choice as keyof typeof TOLERANCE];
-    why = `${b.name} (${b.kind === 'vendor' ? 'Herstellerangaben' : 'unabhängig'}): ${list}. `
-      + (policy.reason === 'quality-gap' ? `${app.display(model)} liegt ${num(policy.gap)} Punkte vor ${app.display(cur.model)} (Schwelle ${MIN_SWITCH_POINTS}).`
+    const vetoNote = policy.vetoedModels.length ? ` Ausgeschlossen nach Erfahrungswerten: ${policy.vetoedModels.map(m => app.display(m)).join(', ')}.` : '';
+    why = `${b.name} (${b.kind === 'vendor' ? 'Herstellerangaben' : 'unabhängig'}): ${list}.${vetoNote} `
+      + (policy.reason === 'current-vetoed' ? `Viele glaubwürdige Stimmen halten ${app.display(cur.model)} für diese Aufgabe für schwach – ${app.display(model)} empfohlen.`
+        : policy.reason === 'quality-gap' ? `${app.display(model)} liegt ${num(policy.gap)} Punkte vor ${app.display(cur.model)} (Schwelle ${MIN_SWITCH_POINTS}).`
         : policy.reason === 'gap-below-threshold' ? `Unterschied nur ${num(policy.gap)} Punkte – unter der Schwelle von ${MIN_SWITCH_POINTS}, kein Wechsel nötig.`
         : policy.reason === 'saving' ? `${app.display(cur.model)} ist nicht besser als ${tol} Punkte (Toleranz „${DIFF_LABEL[r.difficulty!.choice]}“), ${app.display(model)} kostet mindestens ${Math.round(MIN_SAVING * 100)} % weniger.`
         : `${app.display(cur.model)} liegt innerhalb von ${tol} Punkten zum Besten (Toleranz „${DIFF_LABEL[r.difficulty!.choice]}“) – passt.`);
+  } else if (policy && policy.basis === 'spectrum') {
+    basis = 'spectrum'; model = policy.recommended; interrupt = policy.interrupt;
+    const list = policy.scores.slice(0, 4).map(s => `${app.display(s.model)} ${s.score > 0 ? '+' : ''}${s.score}`).join(' · ');
+    why = `Erfahrungswerte (gewichtet, −100…+100): ${list}. `
+      + (policy.reason === 'current-vetoed' ? `${app.display(cur.model)} gilt für diese Aufgabe als schwach.`
+        : policy.reason === 'spectrum-gap' ? `${app.display(model)} liegt ${policy.gap} Punkte vorn (Schwelle ${SPECTRUM_MIN_GAP}).`
+        : `${app.display(cur.model)} passt.`);
   } else if (policy && policy.basis === 'simple') {
     basis = 'simple'; model = policy.recommended; interrupt = policy.interrupt;
     why = policy.reason === 'saving' ? `Einfache Aufgabe: ${app.display(model)} reicht und kostet mindestens ${Math.round(MIN_SAVING * 100)} % weniger als ${app.display(cur.model)}.` : `Einfache Aufgabe: ${app.display(cur.model)} ist bereits günstig genug.`;
@@ -141,7 +151,15 @@ export function recommend(r: Extract<InspectResult, { ok: true }>, app: AppProfi
     if (d.reason === 'same-tier' || d.reason === 'unclear' || d.reason === 'unknown-current') model = cur.model ?? model;
   }
   const effortModel = model ?? cur.model ?? '';
-  return { model, interrupt, why, basis, effort: pickEffort(r.effort, app.efforts(effortModel)), currentEffort: cur.effort, current: cur.model, policy };
+  // Effort differs per model: prefer the level the weighted evidence points to for THIS model, if the app offers it.
+  const kind = (r.taskKind?.choice ?? 'coding') as keyof typeof TASK_KINDS;
+  const fromSpectrum = spectrumEffort(effortModel, kind);
+  const offered = app.efforts(effortModel);
+  const useSpectrum = fromSpectrum && offered.includes(fromSpectrum.effort);
+  const effort = useSpectrum ? fromSpectrum!.effort : pickEffort(r.effort, offered);
+  return { model, interrupt, why, basis, effort, effortSource: effort ? (useSpectrum ? 'erfahrung' : 'jev') : null,
+    effortAvoidFrom: useSpectrum && fromSpectrum!.avoidFrom && offered.includes(fromSpectrum!.avoidFrom) ? fromSpectrum!.avoidFrom : null,
+    currentEffort: cur.effort, current: cur.model, policy };
 }
 
 export const HELP = (app = 'Claude') => [
@@ -163,7 +181,7 @@ export function formatResult(r: InspectResult, description: string | null, app: 
     const same = rec.model && rec.current && (modelKey(rec.model) ?? rec.model) === (modelKey(rec.current) ?? rec.current);
     lines.push(`  Modell:  ${app.display(rec.model)}${same ? ' – passt bereits' : `   (aktuell: ${app.display(rec.current)})`}`);
     lines.push(`  Grund:   ${rec.why}`);
-    if (rec.effort) lines.push(`  Effort:  ${effortLabel(rec.effort)}${rec.currentEffort ? `   (aktuell: ${effortLabel(rec.currentEffort)})` : ''}`);
+    if (rec.effort) lines.push(`  Effort:  ${effortLabel(rec.effort)}${rec.effortAvoidFrom ? ` – nicht ${effortLabel(rec.effortAvoidFrom)} oder höher` : ''}${rec.currentEffort ? `   (aktuell: ${effortLabel(rec.currentEffort)})` : ''}   [${rec.effortSource === 'erfahrung' ? 'Erfahrungswert für dieses Modell' : 'Jev-Einschätzung'}]`);
     else if (rec.model) lines.push(`  Effort:  – (${app.display(rec.model)} hat in ${app.name} keine Effort-Stufe)`);
   }
   lines.push(`  Chat:    ${L.progress![r.progress.choice] ?? r.progress.choice} · Hindernis: ${L.blocker![r.blocker.choice] ?? r.blocker.choice} · nächster Schritt: ${L.next_step![r.next_step.choice] ?? r.next_step.choice}`);

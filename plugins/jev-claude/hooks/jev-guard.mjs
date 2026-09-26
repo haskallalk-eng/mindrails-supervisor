@@ -19770,6 +19770,1365 @@ function modelKey(model) {
   return alias[m] ?? null;
 }
 
+// src/model-spectrum.ts
+var MODEL_SPECTRUM = {
+  "claude-sonnet-5": {
+    "cost_speed": {
+      "score": -78,
+      "evidence": "strong",
+      "mass": 15.67,
+      "sources": 15,
+      "statements": 19
+    },
+    "frontend_ui": {
+      "score": -55,
+      "evidence": "weak",
+      "mass": 2.44,
+      "sources": 3,
+      "statements": 3
+    },
+    "agentic_terminal": {
+      "score": 3,
+      "evidence": "medium",
+      "mass": 5.8,
+      "sources": 6,
+      "statements": 7
+    },
+    "writing_docs": {
+      "score": -50,
+      "evidence": "weak",
+      "mass": 2.78,
+      "sources": 4,
+      "statements": 5
+    },
+    "code_review": {
+      "score": 0,
+      "evidence": "medium",
+      "mass": 3.84,
+      "sources": 3,
+      "statements": 4
+    },
+    "research_knowledge": {
+      "score": -27,
+      "evidence": "medium",
+      "mass": 6.49,
+      "sources": 5,
+      "statements": 6
+    },
+    "implementation": {
+      "score": 57,
+      "evidence": "medium",
+      "mass": 7.95,
+      "sources": 12,
+      "statements": 14
+    },
+    "debugging": {
+      "score": -28,
+      "evidence": "weak",
+      "mass": 2.11,
+      "sources": 3,
+      "statements": 3
+    },
+    "simple_edits": {
+      "score": 21,
+      "evidence": "weak",
+      "mass": 0.54,
+      "sources": 1,
+      "statements": 1
+    },
+    "architecture_planning": {
+      "score": -29,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "claude-opus-5-5": {
+    "cost_speed": {
+      "score": 34,
+      "evidence": "strong",
+      "mass": 20.09,
+      "sources": 15,
+      "statements": 22
+    },
+    "architecture_planning": {
+      "score": 16,
+      "evidence": "medium",
+      "mass": 7.74,
+      "sources": 7,
+      "statements": 9
+    },
+    "agentic_terminal": {
+      "score": 22,
+      "evidence": "strong",
+      "mass": 17.81,
+      "sources": 12,
+      "statements": 17
+    },
+    "frontend_ui": {
+      "score": 74,
+      "evidence": "medium",
+      "mass": 5.64,
+      "sources": 4,
+      "statements": 4
+    },
+    "writing_docs": {
+      "score": 78,
+      "evidence": "strong",
+      "mass": 11.52,
+      "sources": 8,
+      "statements": 12
+    },
+    "implementation": {
+      "score": 69,
+      "evidence": "strong",
+      "mass": 21.8,
+      "sources": 14,
+      "statements": 23
+    },
+    "code_review": {
+      "score": 70,
+      "evidence": "medium",
+      "mass": 4.63,
+      "sources": 4,
+      "statements": 4
+    },
+    "research_knowledge": {
+      "score": 12,
+      "evidence": "strong",
+      "mass": 12.61,
+      "sources": 7,
+      "statements": 10
+    },
+    "debugging": {
+      "score": -5,
+      "evidence": "weak",
+      "mass": 2.96,
+      "sources": 3,
+      "statements": 3
+    },
+    "refactoring_migration": {
+      "score": 55,
+      "evidence": "weak",
+      "mass": 2.48,
+      "sources": 3,
+      "statements": 3
+    },
+    "simple_edits": {
+      "score": -25,
+      "evidence": "weak",
+      "mass": 0.68,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "claude-opus-5": {
+    "debugging": {
+      "score": -50,
+      "evidence": "medium",
+      "mass": 6.4,
+      "sources": 4,
+      "statements": 6
+    },
+    "writing_docs": {
+      "score": -76,
+      "evidence": "medium",
+      "mass": 6.34,
+      "sources": 6,
+      "statements": 8
+    },
+    "code_review": {
+      "score": -27,
+      "evidence": "weak",
+      "mass": 1.46,
+      "sources": 2,
+      "statements": 2
+    },
+    "implementation": {
+      "score": -14,
+      "evidence": "strong",
+      "mass": 16.62,
+      "sources": 14,
+      "statements": 19
+    },
+    "refactoring_migration": {
+      "score": 55,
+      "evidence": "weak",
+      "mass": 2.4,
+      "sources": 1,
+      "statements": 1
+    },
+    "architecture_planning": {
+      "score": -16,
+      "evidence": "medium",
+      "mass": 3.13,
+      "sources": 5,
+      "statements": 6
+    },
+    "agentic_terminal": {
+      "score": -71,
+      "evidence": "medium",
+      "mass": 4.97,
+      "sources": 3,
+      "statements": 7
+    },
+    "cost_speed": {
+      "score": -38,
+      "evidence": "weak",
+      "mass": 2.94,
+      "sources": 3,
+      "statements": 4
+    },
+    "simple_edits": {
+      "score": -15,
+      "evidence": "weak",
+      "mass": 1.86,
+      "sources": 2,
+      "statements": 2
+    },
+    "research_knowledge": {
+      "score": 22,
+      "evidence": "weak",
+      "mass": 2.31,
+      "sources": 2,
+      "statements": 2
+    },
+    "frontend_ui": {
+      "score": 35,
+      "evidence": "weak",
+      "mass": 1.09,
+      "sources": 2,
+      "statements": 2
+    }
+  },
+  "gpt-6-sol": {
+    "writing_docs": {
+      "score": 55,
+      "evidence": "weak",
+      "mass": 2.4,
+      "sources": 2,
+      "statements": 2
+    },
+    "agentic_terminal": {
+      "score": 35,
+      "evidence": "medium",
+      "mass": 4.78,
+      "sources": 4,
+      "statements": 4
+    },
+    "implementation": {
+      "score": -32,
+      "evidence": "strong",
+      "mass": 9.53,
+      "sources": 5,
+      "statements": 10
+    },
+    "cost_speed": {
+      "score": 34,
+      "evidence": "strong",
+      "mass": 17.43,
+      "sources": 13,
+      "statements": 17
+    },
+    "research_knowledge": {
+      "score": -77,
+      "evidence": "medium",
+      "mass": 6.72,
+      "sources": 7,
+      "statements": 7
+    },
+    "code_review": {
+      "score": 54,
+      "evidence": "weak",
+      "mass": 2.34,
+      "sources": 2,
+      "statements": 2
+    },
+    "architecture_planning": {
+      "score": -6,
+      "evidence": "weak",
+      "mass": 1.16,
+      "sources": 2,
+      "statements": 2
+    },
+    "debugging": {
+      "score": -40,
+      "evidence": "weak",
+      "mass": 1.36,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "gpt-5-5": {
+    "writing_docs": {
+      "score": 32,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1,
+      "statements": 1
+    },
+    "debugging": {
+      "score": -32,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1,
+      "statements": 1
+    },
+    "implementation": {
+      "score": -12,
+      "evidence": "medium",
+      "mass": 4.88,
+      "sources": 5,
+      "statements": 6
+    },
+    "agentic_terminal": {
+      "score": 53,
+      "evidence": "weak",
+      "mass": 2.22,
+      "sources": 2,
+      "statements": 2
+    },
+    "architecture_planning": {
+      "score": 47,
+      "evidence": "weak",
+      "mass": 1.74,
+      "sources": 2,
+      "statements": 2
+    },
+    "code_review": {
+      "score": 10,
+      "evidence": "weak",
+      "mass": 0.22,
+      "sources": 1,
+      "statements": 1
+    },
+    "research_knowledge": {
+      "score": 21,
+      "evidence": "weak",
+      "mass": 0.54,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "claude-fable-5-1": {
+    "implementation": {
+      "score": 48,
+      "evidence": "strong",
+      "mass": 17.99,
+      "sources": 8,
+      "statements": 16
+    },
+    "agentic_terminal": {
+      "score": 43,
+      "evidence": "strong",
+      "mass": 11.91,
+      "sources": 7,
+      "statements": 13
+    },
+    "writing_docs": {
+      "score": 27,
+      "evidence": "medium",
+      "mass": 4.87,
+      "sources": 5,
+      "statements": 8
+    },
+    "simple_edits": {
+      "score": -37,
+      "evidence": "weak",
+      "mass": 1.2,
+      "sources": 1,
+      "statements": 1
+    },
+    "code_review": {
+      "score": 47,
+      "evidence": "medium",
+      "mass": 6.24,
+      "sources": 3,
+      "statements": 4
+    },
+    "debugging": {
+      "score": -8,
+      "evidence": "medium",
+      "mass": 3.8,
+      "sources": 4,
+      "statements": 5
+    },
+    "refactoring_migration": {
+      "score": -37,
+      "evidence": "weak",
+      "mass": 1.2,
+      "sources": 1,
+      "statements": 1
+    },
+    "architecture_planning": {
+      "score": 65,
+      "evidence": "medium",
+      "mass": 3.79,
+      "sources": 7,
+      "statements": 10
+    },
+    "frontend_ui": {
+      "score": -10,
+      "evidence": "weak",
+      "mass": 2.89,
+      "sources": 3,
+      "statements": 4
+    },
+    "cost_speed": {
+      "score": -8,
+      "evidence": "strong",
+      "mass": 9.67,
+      "sources": 9,
+      "statements": 11
+    },
+    "research_knowledge": {
+      "score": 33,
+      "evidence": "weak",
+      "mass": 2.99,
+      "sources": 3,
+      "statements": 4
+    }
+  },
+  "gpt-6-astra": {
+    "writing_docs": {
+      "score": 59,
+      "evidence": "medium",
+      "mass": 4.19,
+      "sources": 4,
+      "statements": 4
+    },
+    "agentic_terminal": {
+      "score": 42,
+      "evidence": "strong",
+      "mass": 20.77,
+      "sources": 15,
+      "statements": 18
+    },
+    "frontend_ui": {
+      "score": 18,
+      "evidence": "medium",
+      "mass": 3.54,
+      "sources": 4,
+      "statements": 5
+    },
+    "code_review": {
+      "score": 53,
+      "evidence": "medium",
+      "mass": 11.02,
+      "sources": 4,
+      "statements": 10
+    },
+    "cost_speed": {
+      "score": -21,
+      "evidence": "strong",
+      "mass": 19.48,
+      "sources": 9,
+      "statements": 17
+    },
+    "architecture_planning": {
+      "score": 70,
+      "evidence": "medium",
+      "mass": 4.76,
+      "sources": 3,
+      "statements": 3
+    },
+    "implementation": {
+      "score": 51,
+      "evidence": "strong",
+      "mass": 13.63,
+      "sources": 10,
+      "statements": 17
+    },
+    "debugging": {
+      "score": -44,
+      "evidence": "weak",
+      "mass": 1.6,
+      "sources": 1,
+      "statements": 1
+    },
+    "research_knowledge": {
+      "score": 39,
+      "evidence": "medium",
+      "mass": 3.47,
+      "sources": 4,
+      "statements": 5
+    },
+    "simple_edits": {
+      "score": 25,
+      "evidence": "weak",
+      "mass": 0.68,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "gpt-5-6-sol": {
+    "debugging": {
+      "score": 52,
+      "evidence": "weak",
+      "mass": 2.21,
+      "sources": 1,
+      "statements": 2
+    },
+    "implementation": {
+      "score": 6,
+      "evidence": "strong",
+      "mass": 9.31,
+      "sources": 6,
+      "statements": 7
+    },
+    "writing_docs": {
+      "score": 32,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1,
+      "statements": 1
+    },
+    "research_knowledge": {
+      "score": 55,
+      "evidence": "strong",
+      "mass": 9.14,
+      "sources": 7,
+      "statements": 7
+    },
+    "cost_speed": {
+      "score": 49,
+      "evidence": "strong",
+      "mass": 12.44,
+      "sources": 9,
+      "statements": 10
+    },
+    "code_review": {
+      "score": 18,
+      "evidence": "strong",
+      "mass": 10.83,
+      "sources": 6,
+      "statements": 6
+    },
+    "agentic_terminal": {
+      "score": 17,
+      "evidence": "strong",
+      "mass": 10.53,
+      "sources": 7,
+      "statements": 7
+    },
+    "architecture_planning": {
+      "score": 29,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1,
+      "statements": 1
+    },
+    "simple_edits": {
+      "score": -21,
+      "evidence": "weak",
+      "mass": 0.54,
+      "sources": 1,
+      "statements": 1
+    },
+    "frontend_ui": {
+      "score": 31,
+      "evidence": "weak",
+      "mass": 0.92,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "claude-sonnet-4-6": {
+    "code_review": {
+      "score": 57,
+      "evidence": "weak",
+      "mass": 2.6,
+      "sources": 2,
+      "statements": 2
+    },
+    "architecture_planning": {
+      "score": 32,
+      "evidence": "weak",
+      "mass": 0.92,
+      "sources": 1,
+      "statements": 1
+    },
+    "cost_speed": {
+      "score": -17,
+      "evidence": "weak",
+      "mass": 0.79,
+      "sources": 2,
+      "statements": 2
+    },
+    "implementation": {
+      "score": 51,
+      "evidence": "weak",
+      "mass": 2.09,
+      "sources": 3,
+      "statements": 3
+    },
+    "research_knowledge": {
+      "score": 39,
+      "evidence": "weak",
+      "mass": 1.28,
+      "sources": 1,
+      "statements": 1
+    },
+    "writing_docs": {
+      "score": -29,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1,
+      "statements": 1
+    },
+    "debugging": {
+      "score": 38,
+      "evidence": "weak",
+      "mass": 1.2,
+      "sources": 1,
+      "statements": 1
+    },
+    "frontend_ui": {
+      "score": 19,
+      "evidence": "weak",
+      "mass": 0.48,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "gpt-5-6-terra": {
+    "code_review": {
+      "score": 27,
+      "evidence": "medium",
+      "mass": 3.35,
+      "sources": 2,
+      "statements": 3
+    },
+    "cost_speed": {
+      "score": 23,
+      "evidence": "medium",
+      "mass": 5.71,
+      "sources": 11,
+      "statements": 11
+    },
+    "research_knowledge": {
+      "score": 33,
+      "evidence": "medium",
+      "mass": 4.27,
+      "sources": 4,
+      "statements": 4
+    },
+    "implementation": {
+      "score": 14,
+      "evidence": "medium",
+      "mass": 5.36,
+      "sources": 6,
+      "statements": 7
+    },
+    "agentic_terminal": {
+      "score": -15,
+      "evidence": "weak",
+      "mass": 1.63,
+      "sources": 2,
+      "statements": 2
+    },
+    "simple_edits": {
+      "score": 21,
+      "evidence": "weak",
+      "mass": 0.54,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "claude-fable-5": {
+    "implementation": {
+      "score": 56,
+      "evidence": "weak",
+      "mass": 2.57,
+      "sources": 2,
+      "statements": 3
+    },
+    "writing_docs": {
+      "score": 23,
+      "evidence": "medium",
+      "mass": 4.04,
+      "sources": 6,
+      "statements": 7
+    },
+    "refactoring_migration": {
+      "score": 39,
+      "evidence": "medium",
+      "mass": 4.07,
+      "sources": 4,
+      "statements": 5
+    },
+    "frontend_ui": {
+      "score": -1,
+      "evidence": "medium",
+      "mass": 3.45,
+      "sources": 5,
+      "statements": 5
+    },
+    "agentic_terminal": {
+      "score": 53,
+      "evidence": "weak",
+      "mass": 2.79,
+      "sources": 5,
+      "statements": 5
+    },
+    "debugging": {
+      "score": 55,
+      "evidence": "weak",
+      "mass": 2.4,
+      "sources": 2,
+      "statements": 2
+    },
+    "architecture_planning": {
+      "score": 79,
+      "evidence": "medium",
+      "mass": 7.35,
+      "sources": 12,
+      "statements": 12
+    },
+    "code_review": {
+      "score": 2,
+      "evidence": "medium",
+      "mass": 3.31,
+      "sources": 4,
+      "statements": 4
+    },
+    "cost_speed": {
+      "score": -46,
+      "evidence": "medium",
+      "mass": 6.5,
+      "sources": 8,
+      "statements": 8
+    },
+    "research_knowledge": {
+      "score": -52,
+      "evidence": "weak",
+      "mass": 2.16,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "claude-opus-4-8": {
+    "implementation": {
+      "score": 31,
+      "evidence": "medium",
+      "mass": 6.26,
+      "sources": 4,
+      "statements": 11
+    },
+    "agentic_terminal": {
+      "score": 25,
+      "evidence": "weak",
+      "mass": 2.92,
+      "sources": 3,
+      "statements": 3
+    },
+    "research_knowledge": {
+      "score": 46,
+      "evidence": "weak",
+      "mass": 1.68,
+      "sources": 1,
+      "statements": 1
+    },
+    "code_review": {
+      "score": 37,
+      "evidence": "weak",
+      "mass": 1.18,
+      "sources": 2,
+      "statements": 2
+    },
+    "writing_docs": {
+      "score": 18,
+      "evidence": "weak",
+      "mass": 2.38,
+      "sources": 2,
+      "statements": 4
+    },
+    "cost_speed": {
+      "score": -7,
+      "evidence": "medium",
+      "mass": 3.44,
+      "sources": 2,
+      "statements": 3
+    },
+    "simple_edits": {
+      "score": 29,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1,
+      "statements": 1
+    },
+    "debugging": {
+      "score": -25,
+      "evidence": "weak",
+      "mass": 2.14,
+      "sources": 2,
+      "statements": 2
+    }
+  },
+  "gpt-5-6-luna": {
+    "simple_edits": {
+      "score": 48,
+      "evidence": "weak",
+      "mass": 1.88,
+      "sources": 2,
+      "statements": 2
+    },
+    "cost_speed": {
+      "score": 63,
+      "evidence": "medium",
+      "mass": 3.4,
+      "sources": 4,
+      "statements": 6
+    },
+    "implementation": {
+      "score": 4,
+      "evidence": "medium",
+      "mass": 3.46,
+      "sources": 2,
+      "statements": 4
+    },
+    "agentic_terminal": {
+      "score": 31,
+      "evidence": "weak",
+      "mass": 3.2,
+      "sources": 1,
+      "statements": 2
+    },
+    "code_review": {
+      "score": 1,
+      "evidence": "medium",
+      "mass": 5.37,
+      "sources": 2,
+      "statements": 5
+    }
+  },
+  "claude-haiku-4-5": {
+    "simple_edits": {
+      "score": 73,
+      "evidence": "medium",
+      "mass": 5.4,
+      "sources": 6,
+      "statements": 6
+    },
+    "architecture_planning": {
+      "score": -35,
+      "evidence": "weak",
+      "mass": 1.08,
+      "sources": 1,
+      "statements": 1
+    },
+    "implementation": {
+      "score": 62,
+      "evidence": "medium",
+      "mass": 3.32,
+      "sources": 2,
+      "statements": 2
+    },
+    "cost_speed": {
+      "score": 39,
+      "evidence": "medium",
+      "mass": 5.02,
+      "sources": 5,
+      "statements": 8
+    },
+    "research_knowledge": {
+      "score": -24,
+      "evidence": "weak",
+      "mass": 2.4,
+      "sources": 4,
+      "statements": 4
+    },
+    "writing_docs": {
+      "score": 29,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1,
+      "statements": 1
+    }
+  },
+  "gpt-6-luna": {
+    "cost_speed": {
+      "score": 58,
+      "evidence": "strong",
+      "mass": 11.99,
+      "sources": 9,
+      "statements": 12
+    },
+    "implementation": {
+      "score": 50,
+      "evidence": "weak",
+      "mass": 2,
+      "sources": 2,
+      "statements": 2
+    },
+    "agentic_terminal": {
+      "score": -55,
+      "evidence": "weak",
+      "mass": 2.4,
+      "sources": 1,
+      "statements": 1
+    },
+    "research_knowledge": {
+      "score": 25,
+      "evidence": "weak",
+      "mass": 0.68,
+      "sources": 1,
+      "statements": 1
+    }
+  }
+};
+var MODEL_EFFORT = {
+  "claude-fable-5-1": {
+    "general": {
+      "effort": "xhigh",
+      "avoidFrom": "max",
+      "evidence": "strong",
+      "mass": 16,
+      "sources": 15
+    },
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "medium",
+      "mass": 2.72,
+      "sources": 2
+    },
+    "simple_edits": {
+      "effort": "low",
+      "avoidFrom": "high",
+      "evidence": "weak",
+      "mass": 1.92,
+      "sources": 1
+    },
+    "architecture_planning": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1
+    },
+    "implementation": {
+      "effort": "medium",
+      "avoidFrom": "high",
+      "evidence": "medium",
+      "mass": 2.4,
+      "sources": 2
+    },
+    "code_review": {
+      "effort": "medium",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.6,
+      "sources": 1
+    }
+  },
+  "claude-fable-5": {
+    "general": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "strong",
+      "mass": 6.92,
+      "sources": 10
+    },
+    "architecture_planning": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.36,
+      "sources": 2
+    },
+    "implementation": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "medium",
+      "mass": 2.59,
+      "sources": 3
+    }
+  },
+  "claude-opus-5-5": {
+    "general": {
+      "effort": "medium",
+      "avoidFrom": null,
+      "evidence": "strong",
+      "mass": 20.72,
+      "sources": 10
+    },
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1
+    }
+  },
+  "claude-opus-5": {
+    "general": {
+      "effort": "low",
+      "avoidFrom": null,
+      "evidence": "strong",
+      "mass": 10.82,
+      "sources": 9
+    },
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1
+    },
+    "simple_edits": {
+      "effort": "low",
+      "avoidFrom": "high",
+      "evidence": "weak",
+      "mass": 1.92,
+      "sources": 1
+    },
+    "implementation": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.52,
+      "sources": 2
+    }
+  },
+  "claude-opus-4-8": {
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1
+    },
+    "general": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "strong",
+      "mass": 5.78,
+      "sources": 12
+    },
+    "research_knowledge": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.6,
+      "sources": 2
+    },
+    "implementation": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.28,
+      "sources": 2
+    },
+    "refactoring_migration": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.56,
+      "sources": 1
+    },
+    "architecture_planning": {
+      "effort": "low",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.56,
+      "sources": 1
+    }
+  },
+  "claude-sonnet-5": {
+    "general": {
+      "effort": "low",
+      "avoidFrom": "xhigh",
+      "evidence": "strong",
+      "mass": 9.42,
+      "sources": 11
+    },
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1
+    },
+    "writing_docs": {
+      "effort": "low",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1
+    },
+    "research_knowledge": {
+      "effort": "low",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.2,
+      "sources": 1
+    }
+  },
+  "claude-sonnet-4-6": {
+    "implementation": {
+      "effort": "medium",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.96,
+      "sources": 1
+    },
+    "general": {
+      "effort": "medium",
+      "avoidFrom": "xhigh",
+      "evidence": "medium",
+      "mass": 3.52,
+      "sources": 5
+    },
+    "writing_docs": {
+      "effort": "low",
+      "avoidFrom": "xhigh",
+      "evidence": "medium",
+      "mass": 2.24,
+      "sources": 2
+    },
+    "research_knowledge": {
+      "effort": "medium",
+      "avoidFrom": "high",
+      "evidence": "weak",
+      "mass": 1.12,
+      "sources": 1
+    },
+    "code_review": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.64,
+      "sources": 1
+    }
+  },
+  "gpt-6-astra": {
+    "agentic_terminal": {
+      "effort": "medium",
+      "avoidFrom": "ultra",
+      "evidence": "medium",
+      "mass": 2.64,
+      "sources": 2
+    },
+    "general": {
+      "effort": "medium",
+      "avoidFrom": "xhigh",
+      "evidence": "strong",
+      "mass": 8.04,
+      "sources": 10
+    },
+    "implementation": {
+      "effort": "low",
+      "avoidFrom": "medium",
+      "evidence": "medium",
+      "mass": 4.32,
+      "sources": 3
+    },
+    "code_review": {
+      "effort": "high",
+      "avoidFrom": "xhigh",
+      "evidence": "weak",
+      "mass": 0.88,
+      "sources": 1
+    },
+    "debugging": {
+      "effort": "max",
+      "avoidFrom": "ultra",
+      "evidence": "weak",
+      "mass": 0.88,
+      "sources": 1
+    }
+  },
+  "gpt-6-sol": {
+    "research_knowledge": {
+      "effort": "low",
+      "avoidFrom": "medium",
+      "evidence": "weak",
+      "mass": 2.64,
+      "sources": 1
+    },
+    "general": {
+      "effort": "low",
+      "avoidFrom": "ultra",
+      "evidence": "medium",
+      "mass": 4.64,
+      "sources": 4
+    },
+    "debugging": {
+      "effort": "max",
+      "avoidFrom": "ultra",
+      "evidence": "weak",
+      "mass": 0.88,
+      "sources": 1
+    }
+  },
+  "gpt-6-luna": {
+    "research_knowledge": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 5.28,
+      "sources": 1
+    },
+    "general": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "strong",
+      "mass": 6,
+      "sources": 4
+    },
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": "max",
+      "evidence": "weak",
+      "mass": 1.6,
+      "sources": 1
+    }
+  },
+  "gpt-5-6-sol": {
+    "agentic_terminal": {
+      "effort": "medium",
+      "avoidFrom": "ultra",
+      "evidence": "strong",
+      "mass": 6.71,
+      "sources": 3
+    },
+    "general": {
+      "effort": "high",
+      "avoidFrom": "xhigh",
+      "evidence": "strong",
+      "mass": 12.54,
+      "sources": 15
+    },
+    "frontend_ui": {
+      "effort": "high",
+      "avoidFrom": "xhigh",
+      "evidence": "medium",
+      "mass": 2.52,
+      "sources": 2
+    },
+    "research_knowledge": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.79,
+      "sources": 1
+    },
+    "debugging": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.79,
+      "sources": 1
+    },
+    "implementation": {
+      "effort": "high",
+      "avoidFrom": null,
+      "evidence": "medium",
+      "mass": 5.12,
+      "sources": 2
+    },
+    "code_review": {
+      "effort": "high",
+      "avoidFrom": "xhigh",
+      "evidence": "weak",
+      "mass": 1.41,
+      "sources": 1
+    }
+  },
+  "gpt-5-6-terra": {
+    "code_review": {
+      "effort": "high",
+      "avoidFrom": "xhigh",
+      "evidence": "weak",
+      "mass": 1.41,
+      "sources": 1
+    },
+    "general": {
+      "effort": "low",
+      "avoidFrom": "medium",
+      "evidence": "strong",
+      "mass": 5.63,
+      "sources": 8
+    },
+    "implementation": {
+      "effort": "xhigh",
+      "avoidFrom": "max",
+      "evidence": "weak",
+      "mass": 1.92,
+      "sources": 1
+    },
+    "writing_docs": {
+      "effort": "xhigh",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.79,
+      "sources": 1
+    },
+    "frontend_ui": {
+      "effort": "medium",
+      "avoidFrom": "high",
+      "evidence": "weak",
+      "mass": 1.76,
+      "sources": 1
+    },
+    "agentic_terminal": {
+      "effort": "low",
+      "avoidFrom": "medium",
+      "evidence": "weak",
+      "mass": 1.58,
+      "sources": 1
+    },
+    "debugging": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.8,
+      "sources": 1
+    }
+  },
+  "gpt-5-6-luna": {
+    "debugging": {
+      "effort": "max",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 4.75,
+      "sources": 1
+    },
+    "general": {
+      "effort": "xhigh",
+      "avoidFrom": "ultra",
+      "evidence": "strong",
+      "mass": 7.36,
+      "sources": 5
+    },
+    "agentic_terminal": {
+      "effort": "xhigh",
+      "avoidFrom": "max",
+      "evidence": "medium",
+      "mass": 3.72,
+      "sources": 2
+    }
+  },
+  "gpt-5-5": {
+    "general": {
+      "effort": "medium",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 1.31,
+      "sources": 2
+    },
+    "frontend_ui": {
+      "effort": "low",
+      "avoidFrom": null,
+      "evidence": "weak",
+      "mass": 0.7,
+      "sources": 1
+    }
+  }
+};
+
 // src/model-policy.ts
 var TASK_KINDS = {
   coding: "Writing, changing, debugging or reviewing code in a repository.",
@@ -19787,6 +21146,31 @@ var KIND_BENCHMARK = { coding: "frontiercode", agentic: "terminalbench4", reason
 var TOLERANCE = { easy: 10, normal: 5, hard: 2 };
 var MIN_SWITCH_POINTS = 4;
 var MIN_SAVING = 0.25;
+var KIND_SPECTRUM_TASK = { coding: "implementation", agentic: "agentic_terminal", reasoning: "architecture_planning", research: "research_knowledge", simple: "simple_edits" };
+function spectrumKey(model) {
+  if (!model) return null;
+  const m = model.toLowerCase().replace(/\[[^\]]*\]$/, "").replace(/-\d{8}$/, "").replace(/^gpt-(\d)\.(\d)/, "gpt-$1-$2");
+  return MODEL_SPECTRUM[m] || MODEL_EFFORT[m] ? m : modelKey(m);
+}
+function spectrumCell(model, kind) {
+  const k = spectrumKey(model);
+  return k ? MODEL_SPECTRUM[k]?.[KIND_SPECTRUM_TASK[kind]] ?? null : null;
+}
+var VETO = { strong: -25, medium: -40 };
+function vetoed(model, kind) {
+  const c = spectrumCell(model, kind);
+  return !!c && (c.evidence === "strong" && c.score <= VETO.strong || c.evidence === "medium" && c.score <= VETO.medium);
+}
+var SPECTRUM_MIN_GAP = 30;
+function spectrumEffort(model, kind) {
+  const k = spectrumKey(model);
+  const cells = k ? MODEL_EFFORT[k] : void 0;
+  if (!cells) return null;
+  const task = cells[KIND_SPECTRUM_TASK[kind]];
+  if (task && task.evidence === "strong") return { ...task, scope: "task" };
+  const general = cells.general;
+  return general && general.evidence !== "weak" ? { ...general, scope: "general" } : null;
+}
 function cost(key) {
   const f = MODEL_FACTS[key];
   return f?.price?.output ?? f?.costPerTask ?? null;
@@ -19796,7 +21180,7 @@ function decideModel(input2) {
   const candidates = [...new Set(input2.candidates.map(modelKey).filter((k) => Boolean(k)))];
   if (!current) return { basis: "none", reason: "unknown-current" };
   if (input2.kind === "simple") {
-    const priced = candidates.filter((k) => cost(k) !== null).sort((a, b) => cost(a) - cost(b));
+    const priced = candidates.filter((k) => cost(k) !== null && !vetoed(k, "simple")).sort((a, b) => cost(a) - cost(b));
     const cheapest = priced[0];
     if (!cheapest || cost(current) === null) return { basis: "none", reason: "no-comparable-data" };
     const saving = 1 - cost(cheapest) / cost(current);
@@ -19805,20 +21189,43 @@ function decideModel(input2) {
   const bench = KIND_BENCHMARK[input2.kind];
   const scored = candidates.map((k) => ({ model: k, score: MODEL_FACTS[k]?.scores[bench] })).filter((x) => typeof x.score === "number").sort((a, b) => b.score - a.score);
   const currentScore = MODEL_FACTS[current]?.scores[bench];
-  if (!scored.length || typeof currentScore !== "number") return { basis: "none", reason: "no-comparable-data" };
-  const best = scored[0].score;
-  const eligible = scored.filter((s) => s.score >= best - TOLERANCE[input2.difficulty]);
+  if (!scored.length || typeof currentScore !== "number") return spectrumDecision(input2);
+  const vetoedModels = scored.filter((s) => vetoed(s.model, input2.kind)).map((s) => s.model);
+  const usable = scored.filter((s) => !vetoedModels.includes(s.model));
+  if (!usable.length) return spectrumDecision(input2);
+  const best = usable[0].score;
+  const eligible = usable.filter((s) => s.score >= best - TOLERANCE[input2.difficulty]);
   const recommended = [...eligible].sort((a, b) => (cost(a.model) ?? Infinity) - (cost(b.model) ?? Infinity) || b.score - a.score)[0].model;
   const recScore = MODEL_FACTS[recommended].scores[bench];
   const gap = +(recScore - currentScore).toFixed(1);
-  const base = { basis: "benchmark", benchmark: bench, recommended, scores: scored, current, gap };
+  const base = { basis: "benchmark", benchmark: bench, recommended, scores: scored, current, gap, vetoedModels };
   if (recommended === current) return { ...base, interrupt: false, reason: "current-within-tolerance" };
+  if (vetoedModels.includes(current)) return { ...base, interrupt: true, reason: "current-vetoed" };
   if (eligible.some((e) => e.model === current)) {
     const cr = cost(recommended), cc = cost(current);
     const saving = cr !== null && cc !== null ? 1 - cr / cc : 0;
     return saving >= MIN_SAVING ? { ...base, interrupt: true, reason: "saving" } : { ...base, interrupt: false, reason: "current-within-tolerance" };
   }
   return gap >= MIN_SWITCH_POINTS ? { ...base, interrupt: true, reason: "quality-gap" } : { ...base, interrupt: false, reason: "gap-below-threshold" };
+}
+function spectrumDecision(input2) {
+  const currentKey = spectrumKey(input2.current);
+  const cur = spectrumCell(input2.current, input2.kind);
+  if (!currentKey || !cur || cur.evidence === "weak") return { basis: "none", reason: currentKey ? "no-comparable-data" : "unknown-current" };
+  const byKey = /* @__PURE__ */ new Map();
+  for (const c of input2.candidates) {
+    const k = spectrumKey(c);
+    if (k && !byKey.has(k)) byKey.set(k, c);
+  }
+  const scores = [...byKey.keys()].map((k) => ({ key: k, cell: MODEL_SPECTRUM[k]?.[KIND_SPECTRUM_TASK[input2.kind]] })).filter((x) => !!x.cell && x.cell.evidence !== "weak" && !vetoed(x.key, input2.kind)).sort((a, b) => b.cell.score - a.cell.score);
+  if (!scores.length) return { basis: "none", reason: "no-comparable-data" };
+  const top = scores[0];
+  const recommended = byKey.get(top.key) ?? top.key;
+  const gap = top.cell.score - cur.score;
+  const base = { basis: "spectrum", recommended, scores: scores.map((s) => ({ model: byKey.get(s.key) ?? s.key, score: s.cell.score, evidence: s.cell.evidence })), current: input2.current, gap };
+  if (top.key === currentKey) return { ...base, interrupt: false, reason: "spectrum-ok" };
+  if (vetoed(input2.current, input2.kind)) return { ...base, interrupt: true, reason: "current-vetoed" };
+  return gap >= SPECTRUM_MIN_GAP ? { ...base, interrupt: true, reason: "spectrum-gap" } : { ...base, recommended: input2.current, interrupt: false, reason: "spectrum-ok" };
 }
 
 // src/model-router.ts
@@ -20413,7 +21820,14 @@ function recommend(r, app) {
     const b = BENCHMARKS[policy.benchmark];
     const list = policy.scores.slice(0, 4).map((s) => `${app.display(s.model)} ${num(s.score)}`).join(" \xB7 ");
     const tol = TOLERANCE[r.difficulty.choice];
-    why = `${b.name} (${b.kind === "vendor" ? "Herstellerangaben" : "unabh\xE4ngig"}): ${list}. ` + (policy.reason === "quality-gap" ? `${app.display(model)} liegt ${num(policy.gap)} Punkte vor ${app.display(cur.model)} (Schwelle ${MIN_SWITCH_POINTS}).` : policy.reason === "gap-below-threshold" ? `Unterschied nur ${num(policy.gap)} Punkte \u2013 unter der Schwelle von ${MIN_SWITCH_POINTS}, kein Wechsel n\xF6tig.` : policy.reason === "saving" ? `${app.display(cur.model)} ist nicht besser als ${tol} Punkte (Toleranz \u201E${DIFF_LABEL[r.difficulty.choice]}\u201C), ${app.display(model)} kostet mindestens ${Math.round(MIN_SAVING * 100)} % weniger.` : `${app.display(cur.model)} liegt innerhalb von ${tol} Punkten zum Besten (Toleranz \u201E${DIFF_LABEL[r.difficulty.choice]}\u201C) \u2013 passt.`);
+    const vetoNote = policy.vetoedModels.length ? ` Ausgeschlossen nach Erfahrungswerten: ${policy.vetoedModels.map((m) => app.display(m)).join(", ")}.` : "";
+    why = `${b.name} (${b.kind === "vendor" ? "Herstellerangaben" : "unabh\xE4ngig"}): ${list}.${vetoNote} ` + (policy.reason === "current-vetoed" ? `Viele glaubw\xFCrdige Stimmen halten ${app.display(cur.model)} f\xFCr diese Aufgabe f\xFCr schwach \u2013 ${app.display(model)} empfohlen.` : policy.reason === "quality-gap" ? `${app.display(model)} liegt ${num(policy.gap)} Punkte vor ${app.display(cur.model)} (Schwelle ${MIN_SWITCH_POINTS}).` : policy.reason === "gap-below-threshold" ? `Unterschied nur ${num(policy.gap)} Punkte \u2013 unter der Schwelle von ${MIN_SWITCH_POINTS}, kein Wechsel n\xF6tig.` : policy.reason === "saving" ? `${app.display(cur.model)} ist nicht besser als ${tol} Punkte (Toleranz \u201E${DIFF_LABEL[r.difficulty.choice]}\u201C), ${app.display(model)} kostet mindestens ${Math.round(MIN_SAVING * 100)} % weniger.` : `${app.display(cur.model)} liegt innerhalb von ${tol} Punkten zum Besten (Toleranz \u201E${DIFF_LABEL[r.difficulty.choice]}\u201C) \u2013 passt.`);
+  } else if (policy && policy.basis === "spectrum") {
+    basis = "spectrum";
+    model = policy.recommended;
+    interrupt = policy.interrupt;
+    const list = policy.scores.slice(0, 4).map((s) => `${app.display(s.model)} ${s.score > 0 ? "+" : ""}${s.score}`).join(" \xB7 ");
+    why = `Erfahrungswerte (gewichtet, \u2212100\u2026+100): ${list}. ` + (policy.reason === "current-vetoed" ? `${app.display(cur.model)} gilt f\xFCr diese Aufgabe als schwach.` : policy.reason === "spectrum-gap" ? `${app.display(model)} liegt ${policy.gap} Punkte vorn (Schwelle ${SPECTRUM_MIN_GAP}).` : `${app.display(cur.model)} passt.`);
   } else if (policy && policy.basis === "simple") {
     basis = "simple";
     model = policy.recommended;
@@ -20427,7 +21841,23 @@ function recommend(r, app) {
     if (d.reason === "same-tier" || d.reason === "unclear" || d.reason === "unknown-current") model = cur.model ?? model;
   }
   const effortModel = model ?? cur.model ?? "";
-  return { model, interrupt, why, basis, effort: pickEffort(r.effort, app.efforts(effortModel)), currentEffort: cur.effort, current: cur.model, policy };
+  const kind = r.taskKind?.choice ?? "coding";
+  const fromSpectrum = spectrumEffort(effortModel, kind);
+  const offered = app.efforts(effortModel);
+  const useSpectrum = fromSpectrum && offered.includes(fromSpectrum.effort);
+  const effort = useSpectrum ? fromSpectrum.effort : pickEffort(r.effort, offered);
+  return {
+    model,
+    interrupt,
+    why,
+    basis,
+    effort,
+    effortSource: effort ? useSpectrum ? "erfahrung" : "jev" : null,
+    effortAvoidFrom: useSpectrum && fromSpectrum.avoidFrom && offered.includes(fromSpectrum.avoidFrom) ? fromSpectrum.avoidFrom : null,
+    currentEffort: cur.effort,
+    current: cur.model,
+    policy
+  };
 }
 var HELP = (app = "Claude") => [
   `Jev-Befehle (werden nicht an ${app} gesendet):`,
@@ -20447,7 +21877,7 @@ function formatResult(r, description, app, opts = {}) {
     const same = rec.model && rec.current && (modelKey(rec.model) ?? rec.model) === (modelKey(rec.current) ?? rec.current);
     lines.push(`  Modell:  ${app.display(rec.model)}${same ? " \u2013 passt bereits" : `   (aktuell: ${app.display(rec.current)})`}`);
     lines.push(`  Grund:   ${rec.why}`);
-    if (rec.effort) lines.push(`  Effort:  ${effortLabel(rec.effort)}${rec.currentEffort ? `   (aktuell: ${effortLabel(rec.currentEffort)})` : ""}`);
+    if (rec.effort) lines.push(`  Effort:  ${effortLabel(rec.effort)}${rec.effortAvoidFrom ? ` \u2013 nicht ${effortLabel(rec.effortAvoidFrom)} oder h\xF6her` : ""}${rec.currentEffort ? `   (aktuell: ${effortLabel(rec.currentEffort)})` : ""}   [${rec.effortSource === "erfahrung" ? "Erfahrungswert f\xFCr dieses Modell" : "Jev-Einsch\xE4tzung"}]`);
     else if (rec.model) lines.push(`  Effort:  \u2013 (${app.display(rec.model)} hat in ${app.name} keine Effort-Stufe)`);
   }
   lines.push(`  Chat:    ${L.progress[r.progress.choice] ?? r.progress.choice} \xB7 Hindernis: ${L.blocker[r.blocker.choice] ?? r.blocker.choice} \xB7 n\xE4chster Schritt: ${L.next_step[r.next_step.choice] ?? r.next_step.choice}`);

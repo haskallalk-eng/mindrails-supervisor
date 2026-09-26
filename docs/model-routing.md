@@ -79,3 +79,20 @@ Jev classifies each task into a kind (`coding`, `agentic`, `reasoning`, `researc
 ### Packaging
 
 `plugins/jev-claude` (Claude Code plugin, marketplace `.claude-plugin/marketplace.json`) and `plugins/jev-codex` (Codex plugin, marketplace `.agents/plugins/marketplace.json`) contain the same self-contained hook bundle (`hooks/jev-guard.mjs`, built by `npm run build:jev-plugins`), so installing from GitHub needs no build step. Neither is an MCP server: MCP servers offer tools the model may call, whereas Jev must run before the model sees the prompt, which only a prompt hook can do.
+
+### Weighted practitioner/user spectrum (`src/model-spectrum.ts`)
+
+Benchmarks cover only some models and task types. A second evidence source is a weighted spectrum built from 668 collected statements ("model X is good/bad at task Y") and 171 effort statements from Hacker News, Reddit, X/YouTube, GitHub, developer blogs, tool vendors and non-English communities (`data/spectrum-claims/`, rebuilt with `npm run spectrum`; overview in [model-spectrum.md](model-spectrum.md)). Each statement is weighted by
+
+- credibility of the author (researcher/benchmark org 1.3, practitioner with structured tests or usage data 1.2, individual user 0.8, model vendor 0.8, press 0.6),
+- platform (paper/benchmark 1.2, GitHub 1.1, Hacker News and blogs 1.0, Reddit/X/forums 0.85, YouTube/news 0.8),
+- quality of the statement (measured/tested ×2, clear experience ×1, passing remark ×0.4),
+- recency (September 1.0 … June 0.7) and vendor self-interest (vendor praising its own model ×0.6, about competitors ×0.5).
+
+Repeats of the same point from the same thread/article count 30 % beyond the first; statements dated before a model's release are dropped (month-only dates count as the end of the month). Per model and task the score is 100·(positive − negative)/(total + 2), so thin evidence stays near 0; evidence is *strong* (weight ≥ 8 from ≥ 5 sources), *medium* (≥ 3 from ≥ 2) or *weak*. Effort verdicts (best / enough / too little / too much / worse than lower) vote for the level to use per model; task-specific effort votes count half toward the model's general level. Mislabelled effort verdicts found in a manual review are corrected and listed in `data/spectrum-claims/CORRECTIONS.md`.
+
+How the policy uses it:
+
+- **Veto**: a benchmark candidate rated clearly weak for the task (score ≤ −25 with strong or ≤ −40 with medium evidence) is not recommended; if the *current* model is vetoed, Jev recommends switching (`current-vetoed`).
+- **Fallback** where no comparable benchmark exists (e.g. Sonnet 5, Haiku 4.5): the best-rated model with at least medium evidence is recommended only if it leads the current model by ≥ 30 spectrum points.
+- **Effort per model**: the level the weighted verdicts point to for that model (task-specific only with strong evidence, else the model's general level with at least medium evidence), shown with "nicht … oder höher" when higher levels were reported as wasteful or worse; otherwise Jev's pick, always clamped to levels the app offers for that model. Effort is not assumed comparable across models or vendors.
