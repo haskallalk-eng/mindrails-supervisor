@@ -16,6 +16,12 @@ Umstellen musst du selbst im Menü: Weder Claude noch Codex lassen ein Plugin Mo
 
 Die Jev-Figur ist ein kleines Fenster unter Windows. Sie erscheint unten rechts am Claude- bzw. Codex-Fenster, liegt im Vordergrund und nimmt nie den Fokus. „Wie?“ klappt einen Satz auf, wo man umstellt. Sonst verschwindet sie nach ein paar Sekunden oder per Klick; wartet eine Nachricht, bleibt sie, bis umgestellt oder gesendet ist.
 
+### Jev-App: ein Chat für Claude Code und Codex (Vorschau)
+
+Ein eigenes Fenster: links Projekte, Gespräche und deine bestehenden Claude- und Codex-Chats, in der Mitte der Chat. Jev wählt pro Nachricht Agent, Modell und Effort über **beide** Familien und startet den Lauf selbst mit dieser Einstellung – über die offiziellen Programme Claude Code (`claude`) und Codex (`codex app-server`) mit **deinen eigenen Logins**, ohne API-Schlüssel für die Agenten. Wechselt Jev mitten im Gespräch, bekommt der neue Agent den ganzen Verlauf mit, den er noch nicht kennt (zu lange Verläufe: ältere Nachrichten gekürzt). Beide arbeiten im selben Projektordner; Befehle und Dateiänderungen fragen im Fenster nach. Ein Wechsel lohnt sich nur bei klarem Vorteil, weil der neue Agent den Verlauf einmal frisch einliest.
+
+Starten: `npm run build`, dann `node dist/jev-app/app.js --cwd <Projektordner>` (öffnet ein eigenes Edge-Fenster). Claude braucht einmal `claude` → `/login`. Chats, die gerade in der Claude- oder Codex-App offen sind, beschreibt die Jev-App nicht; bestehende Chats lassen sich als neues Jev-Gespräch fortsetzen (Verlauf wird übernommen, Original bleibt unverändert). Nur für die eigene Nutzung auf dem eigenen PC gedacht.
+
 **Installieren (Claude Code):**
 
 ```sh

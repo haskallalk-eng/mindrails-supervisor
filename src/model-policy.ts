@@ -69,9 +69,14 @@ export type PolicyResult =
   | { basis: 'simple'; recommended: string; interrupt: boolean; reason: 'saving' | 'current-cheap-enough'; current: string | null }
   | { basis: 'none'; reason: 'no-comparable-data' | 'unknown-current' };
 
-/** Relative cost of a model: list output price (Claude) or measured cost per task (Codex). */
+/**
+ * Cost per task, one unit for both families: measured where published (`costPerTask`), else the
+ * output price scaled by Opus 5.5, which has both (same tokens per task assumed). Comparing a
+ * $/M-token price with a $/task cost made Codex models look ~75 % cheaper than Claude models.
+ */
+const PRICE_TO_TASK = MODEL_FACTS['claude-opus-5-5']!.costPerTask! / MODEL_FACTS['claude-opus-5-5']!.price!.output;
 function cost(key: string): number | null {
-  const f = MODEL_FACTS[key]; return f?.price?.output ?? f?.costPerTask ?? null;
+  const f = MODEL_FACTS[key]; return f?.costPerTask ?? (f?.price ? f.price.output * PRICE_TO_TASK : null);
 }
 
 export function decideModel(input: { kind: TaskKind; difficulty: Difficulty; current: string | null; candidates: string[] }): PolicyResult {
