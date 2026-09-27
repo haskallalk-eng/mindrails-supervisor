@@ -326,54 +326,82 @@ test('Jev card by distance: fits gets a check mark, one step a note, two or more
   const card = current => { const a = app(current); const x = assess(coding, a); return { ...x, card: jevCard(x, a) }; };
   // Opus 5.5 · Mittel fits coding (its effort comes from the evidence for Opus 5.5, not Jev's generic xhigh).
   const fits = card({ model: 'claude-opus-5-5', effort: 'medium' });
-  assert.deepEqual([fits.level, fits.card.text, fits.card.badge], ['fits', '✓ Jev (Coding, normal): Opus 5.5 · Mittel passt.', null]);
-  // One step (Hoch instead of Mittel): a note; the message runs on and the Jev figure is offered.
+  assert.deepEqual([fits.level, fits.card.text, fits.card.badge], ['fits', '✓ Jev: Opus 5.5 · Mittel passt.', null]);
+  // One step (Hoch instead of Mittel): one short line; the message runs on and the Jev figure is offered.
   const one = card({ model: 'claude-opus-5-5', effort: 'high' });
   assert.deepEqual([one.level, one.kind, one.effortSteps], ['note', 'effort', 1]);
-  assert.deepEqual(one.card.text.split('\n'), [
-    '⚙ JEV · EFFORT ÄNDERN – 1 STUFE ZU HOCH',
-    'Hoch → Mittel (medium)',
-    '○ Niedrig   ◆ Mittel   ● Hoch   ○ Extra hoch   ○ Max      ◆ empfohlen  ● eingestellt',
-    'Opus 5.5 passt (Coding, normal).',
-    'Unten rechts den Effort auf „Mittel“ stellen. Nur eine Empfehlung – noch nicht umgestellt. Die aktuelle Nachricht läuft weiter.']);
-  assert.deepEqual(one.card.badge, { title: 'Effort → Mittel', body: 'Unten rechts umstellen · die Nachricht läuft weiter' });
-  assert.match(card({ model: 'claude-opus-5-5', effort: 'low' }).card.text, /^⚙ JEV · EFFORT ÄNDERN – 1 STUFE ZU NIEDRIG/);
-  // Three steps (Max instead of Mittel): held, with both ways forward.
+  assert.equal(one.card.text, '⚙ Jev: Effort 1 Stufe zu hoch: Hoch → Mittel · Opus 5.5 ✓');
+  assert.deepEqual(one.card.badge, { title: 'Effort → Mittel', steps: '1 Stufe zu hoch', how: 'Unten rechts im Eingabefeld das Menü öffnen und Effort „Mittel“ wählen.' });
+  assert.equal(card({ model: 'claude-opus-5-5', effort: 'low' }).card.text, '⚙ Jev: Effort 1 Stufe zu niedrig: Niedrig → Mittel · Opus 5.5 ✓');
+  // Three steps (Max instead of Mittel): held – one line and what to do, nothing more (user rule).
   const three = card({ model: 'claude-opus-5-5', effort: 'max' });
   assert.deepEqual([three.level, three.effortSteps], ['stop', 3]);
-  assert.equal(three.card.text.split('\n')[0], '⛔ JEV · ANGEHALTEN – EFFORT 3 STUFEN ZU HOCH');
-  assert.match(three.card.text, /So geht's weiter: unten rechts den Effort auf „Mittel“ stellen und die Nachricht erneut senden\.\nOhne Umstellen erneut senden = sie läuft so, wie es gerade eingestellt ist\.$/);
-  assert.equal(three.card.badge.body, 'Nachricht angehalten – umstellen, dann erneut senden');
-  // Model one tier off (Fable 5.1 "Spitze" → Opus 5.5 "Stark" for coding): a note, with the benchmark reason.
+  assert.deepEqual(three.card.text.split('\n'), ['⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5.5 ✓', 'Effort umstellen und erneut senden.']);
+  assert.equal(three.card.badge.steps, '3 Stufen zu hoch');
+  // Model one tier off (Fable 5.1 "Spitze" → Opus 5.5 "Stark" for coding): one line; the benchmark reason goes to the log and "#jev status".
   const fable = card({ model: 'claude-fable-5-1', effort: 'max' });
   assert.deepEqual([fable.level, fable.kind, fable.modelSteps], ['note', 'model', 1]);
-  assert.deepEqual(fable.card.text.split('\n').slice(0, 3), ['⚙ JEV · MODELL: BESSERE WAHL', 'Fable 5.1 · Max → Opus 5.5 · Mittel   (Spitze → Stark)',
-    'Grund: FrontierCode v1.1 Main: Opus 5.5 54,4 · Fable 5.1 50,3 – gleich gut, mind. 25 % günstiger.']);
+  assert.equal(fable.card.text, '⚙ Jev: Modell 1 Stufe zu stark: Fable 5.1 → Opus 5.5 · Mittel');
+  assert.equal(fable.why, 'FrontierCode v1.1 Main: Opus 5.5 54,4 · Fable 5.1 50,3 – gleich gut, mind. 25 % günstiger');
+  assert.equal(fable.card.badge.how, 'Unten rechts im Eingabefeld das Menü öffnen und „Opus 5.5“ mit Effort „Mittel“ wählen.');
   assert.equal(recommend(coding, app({ model: 'claude-fable-5-1', effort: 'max' })).interrupt, true);
   // Model two tiers off (Opus 5.5 "Stark" → Haiku 4.5 "Schnell" for a simple task): held.
   const simpleApp = app({ model: 'claude-opus-5-5', effort: 'medium' }), simple = assess(answer('simple', 'easy'), simpleApp);
   assert.deepEqual([simple.level, simple.kind, simple.modelSteps, simple.target], ['stop', 'model', 2, 'claude-haiku-4-5']);
-  assert.deepEqual(jevCard(simple, simpleApp).text.split('\n').slice(0, 2), ['⛔ JEV · ANGEHALTEN – MODELL 2 STUFEN DANEBEN', 'Opus 5.5 · Mittel → Haiku 4.5   (Stark → Schnell)']);
+  assert.deepEqual(jevCard(simple, simpleApp).text.split('\n'), ['⛔ Jev angehalten – Modell 2 Stufen zu stark: Opus 5.5 → Haiku 4.5', 'Modell umstellen und erneut senden.']);
   // A hard task gets one level above the model's sweet spot (Opus 5.5: Hoch), but never into the range rated "too much" (Fable 5.1 stays below Max).
   const hard = answer('coding', 'hard');
   assert.equal(assess(hard, app({ model: 'claude-opus-5-5', effort: 'high' })).level, 'fits');
   assert.equal(effortFor('claude-fable-5-1', answer('agentic', 'hard'), app({ model: 'claude-fable-5-1', effort: 'xhigh' })).effort, 'xhigh');
   assert.equal(effortFor('claude-fable-5-1', answer('agentic', 'normal'), app({ model: 'claude-fable-5-1', effort: 'xhigh' })).effort, 'xhigh');
   // Unknown setting: a plain recommendation, never a hold.
-  assert.match(recommendationLine(coding, app({ model: null, effort: null })), /^Jev \(Coding, normal\): empfohlen .+ – die aktuelle Einstellung ist noch unbekannt\.$/);
+  assert.match(recommendationLine(coding, app({ model: null, effort: null })), /^Jev: empfohlen .+ – aktuelle Einstellung unbekannt\.$/);
   // Codex wording ("Denkaufwand", model menu) with the model's own levels, including ultra.
   const catalog = [{ slug: 'gpt-6-astra', display_name: 'GPT-6-Astra', supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map(effort => ({ effort })) },
     { slug: 'gpt-6-sol', display_name: 'GPT-6-Sol', supported_reasoning_levels: ['low', 'medium'].map(effort => ({ effort })) }];
   const codex = { kind: 'codex', name: 'Codex', tiers: codexTiers(catalog), candidates: ['gpt-6-astra', 'gpt-6-sol'], readTurns: () => [], current: () => ({ model: 'gpt-6-astra', effort: 'high' }),
     efforts: m => (catalog.find(c => c.slug === m)?.supported_reasoning_levels ?? []).map(l => l.effort), display: m => names[m] ?? String(m) };
   const cx = jevCard(assess(coding, codex), codex);
-  assert.deepEqual(cx.text.split('\n'), [
-    '⚙ JEV · DENKAUFWAND ÄNDERN – 1 STUFE ZU HOCH',
-    'Hoch → Mittel (medium)',
-    '○ Niedrig   ◆ Mittel   ● Hoch   ○ Extra hoch   ○ Max   ○ Ultra      ◆ empfohlen  ● eingestellt',
-    'GPT-6-Astra passt (Coding, normal).',
-    'Im Modellmenü den Denkaufwand auf „Mittel“ stellen. Nur eine Empfehlung – noch nicht umgestellt. Die aktuelle Nachricht läuft weiter.']);
-  assert.deepEqual(cx.badge, { title: 'Denkaufwand → Mittel', body: 'Im Modellmenü umstellen · die Nachricht läuft weiter' });
+  assert.equal(cx.text, '⚙ Jev: Denkaufwand 1 Stufe zu hoch: Hoch → Mittel · GPT-6-Astra ✓');
+  assert.deepEqual(cx.badge, { title: 'Denkaufwand → Mittel', steps: '1 Stufe zu hoch', how: 'Im Modellmenü Denkaufwand „Mittel“ wählen.' });
+});
+
+test('Claude desktop: a message two or more steps off waits for the switch and then runs by itself; "So senden", a gone figure and the time limit end the wait', async () => {
+  const { waitForSwitch } = await import('../dist/jev-hook.js');
+  const from = { model: 'claude-opus-5-5', effort: 'max' };
+  const base = { from, fits: s => s.effort === 'medium' || s.effort === 'high', sent: () => false, shown: () => true, pollMs: 5 };
+  // Max → Extra hoch (still two steps off: keeps waiting) → Mittel: runs.
+  const menu = [from, from, { ...from, effort: 'xhigh' }, { ...from, effort: 'xhigh' }, null, { ...from, effort: 'medium' }];
+  let polls = 0;
+  const switched = await waitForSwitch({ ...base, menu: () => menu[Math.min(polls++, menu.length - 1)], deadline: Date.now() + 2000 });
+  assert.deepEqual(switched, { kind: 'switched', setting: { model: 'claude-opus-5-5', effort: 'medium' } });
+  assert.equal(polls, 6, 'a setting still two steps off and a half-written file (null) do not end the wait');
+  assert.deepEqual(await waitForSwitch({ ...base, menu: () => from, sent: () => true, deadline: Date.now() + 2000 }), { kind: 'as-is' });
+  assert.deepEqual(await waitForSwitch({ ...base, menu: () => from, shown: () => false, deadline: Date.now() + 2000 }), { kind: 'gone' });
+  const t0 = Date.now();
+  assert.deepEqual(await waitForSwitch({ ...base, menu: () => from, deadline: t0 + 60 }), { kind: 'timeout' });
+  assert.ok(Date.now() - t0 < 1000);
+});
+
+test('a switch made while the message waited is checked against what the reply really ran on', async (t) => {
+  const { recordSwitch, verifySwitch, claudeLastReply } = await import('../dist/jev-hook.js');
+  const { writeFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-switch-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const s = '11111111-2222-4333-8444-555555555555', transcript = join(dir, 'chat.jsonl');
+  const reply = (at, effort) => JSON.stringify({ type: 'assistant', timestamp: at, perTurnEffort: effort, message: { role: 'assistant', model: 'claude-opus-5-5', content: [] } }) + '\n';
+  const expect = { model: 'claude-opus-5-5', effort: 'medium' };
+  await writeFile(transcript, reply('2026-09-27T10:00:00.000Z', 'max'));
+  assert.deepEqual(claudeLastReply(transcript), { model: 'claude-opus-5-5', effort: 'max', at: '2026-09-27T10:00:00.000Z' });
+  recordSwitch(dir, s, expect, Date.parse('2026-09-27T10:00:05.000Z'));
+  assert.equal(verifySwitch(dir, s, transcript), null, 'no reply to it yet');
+  await writeFile(transcript, reply('2026-09-27T10:00:00.000Z', 'max') + reply('2026-09-27T10:00:06.000Z', 'medium'));
+  assert.deepEqual(verifySwitch(dir, s, transcript), { ok: true, expected: expect, served: expect });
+  assert.equal(verifySwitch(dir, s, transcript), null, 'checked once');
+  recordSwitch(dir, s, expect, Date.parse('2026-09-27T10:00:05.000Z'));
+  await writeFile(transcript, reply('2026-09-27T10:00:06.000Z', 'max'));
+  assert.equal(verifySwitch(dir, s, transcript).ok, false);
+  const log = (await readFile(join(dir, 'guard-log.jsonl'), 'utf8')).trim().split('\n').map(l => JSON.parse(l));
+  assert.deepEqual(log.map(e => [e.event, e.ok]), [['switch-verified', true], ['switch-verified', false]]);
 });
 
 test('a held message: the next send in that chat passes once within 15 minutes; the hook says so and asks Jev nothing', async (t) => {
@@ -391,8 +419,14 @@ test('a held message: the next send in that chat passes once within 15 minutes; 
   await writeFile(join(dir, 'guard.json'), JSON.stringify({ sessions: { [s]: true } }));
   markHeld(dir, s);
   const env = { ...process.env, JEV_PANEL_HOME: dir, JEV_NO_USER_KEY: '1', AI_GATEWAY_API_KEY: '', JEV_CLAUDE_DESKTOP_SESSIONS: join(dir, 'none') };
-  const out = JSON.parse(spawnSync(process.execPath, ['dist/jev-hook.js'], { input: JSON.stringify({ session_id: s, transcript_path: 'tests/fixtures/claude-session.jsonl', prompt: 'Baue bitte einen Parser für CSV-Dateien' }), env, encoding: 'utf8' }).stdout);
-  assert.deepEqual([out.decision, out.systemMessage], [undefined, 'Jev: Die angehaltene Nachricht geht jetzt durch.']);
+  const send = prompt => JSON.parse(spawnSync(process.execPath, ['dist/jev-hook.js'], { input: JSON.stringify({ session_id: s, transcript_path: 'tests/fixtures/claude-session.jsonl', prompt }), env, encoding: 'utf8' }).stdout);
+  const out = send('Baue bitte einen Parser für CSV-Dateien');
+  assert.deepEqual([out.decision, out.systemMessage, out.hookSpecificOutput], [undefined, 'Jev: geht jetzt durch.', undefined]);
+  // Asking "wie?" instead of resending: Claude gets the hold and where to switch, to answer in one sentence.
+  markHeld(dir, s, Date.now(), { line: '⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5.5 ✓', how: 'Unten rechts im Eingabefeld das Menü öffnen und Effort „Mittel“ wählen.' });
+  const how = send('wie?');
+  assert.equal(how.systemMessage, 'Jev: geht jetzt durch.');
+  assert.match(how.hookSpecificOutput.additionalContext, /angehalten \(„⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5\.5 ✓“\)\. Umstellen: Unten rechts im Eingabefeld das Menü öffnen und Effort „Mittel“ wählen\. Fragt der Nutzer, wie das geht, antworte in einem Satz/);
 });
 
 test('Claude desktop: the chat\'s live menu setting comes from the app\'s session file (read-only)', async (t) => {
@@ -405,6 +439,15 @@ test('Claude desktop: the chat\'s live menu setting comes from the app\'s sessio
   await writeFile(join(root, 'acct', 'org', 'local_b.json'), JSON.stringify({ sessionId: 'local_b', cliSessionId: b, model: 'claude-sonnet-5', effort: 'low' }));
   assert.deepEqual(claudeMenu(a, root), { model: 'claude-opus-5-5', effort: 'max' });
   assert.deepEqual(claudeMenu(b, root), { model: 'claude-sonnet-5', effort: 'low' });
+  // While a message waits, only that one file is read again; a half-written file reads as nothing.
+  const { claudeMenuFile, readMenuFile } = await import('../dist/jev-hook.js');
+  const file = claudeMenuFile(a, root);
+  assert.equal(file, join(root, 'acct', 'org', 'local_a.json'));
+  await writeFile(file, `{"sessionId":"local_a","cliSessionId":"${a}","model":"claude-opus-5-5","eff`);
+  assert.equal(readMenuFile(file, a), null);
+  await writeFile(file, JSON.stringify({ sessionId: 'local_a', cliSessionId: a, model: 'claude-opus-5-5', effort: 'medium' }));
+  assert.deepEqual(readMenuFile(file, a), { model: 'claude-opus-5-5', effort: 'medium' });
+  assert.equal(readMenuFile(file, b), null);
   assert.equal(claudeMenu('33333333-2222-4333-8444-555555555555', root), null);
   assert.equal(claudeMenu('keine-id', root), null);
   assert.equal(claudeMenu(a, join(root, 'fehlt')), null);

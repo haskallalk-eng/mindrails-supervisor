@@ -8,11 +8,13 @@ Was du siehst, hängt davon ab, wie weit deine Einstellung danebenliegt:
 
 | Abstand | Was passiert |
 |---|---|
-| passt | ein `✓` im Chat |
-| **1 Stufe** daneben (Effort) oder 1 Leistungsklasse (Modell) | eine Karte im Chat, z. B. „⚙ JEV · EFFORT ÄNDERN – 1 STUFE ZU HOCH“ mit Skala `○ Niedrig ◆ Mittel ● Hoch …`, und die **Jev-Figur** unten rechts am Fenster. Die Nachricht läuft weiter. |
-| **2 oder mehr** Stufen daneben | Die Nachricht wird **einmal angehalten**, mit derselben Karte und einer roten Jev-Figur. Umstellen und erneut senden, oder einfach erneut senden, dann läuft sie so. |
+| passt | `✓ Jev: Opus 5.5 · Mittel passt.` |
+| **1 Stufe** daneben (Effort) oder 1 Leistungsklasse (Modell) | eine Zeile, z. B. `⚙ Jev: Effort 1 Stufe zu hoch: Hoch → Mittel · Opus 5.5 ✓`, und die **Jev-Figur** unten rechts am Fenster. Die Nachricht läuft. |
+| **2 oder mehr** Stufen daneben | **Claude-Desktop-App:** Die Nachricht **wartet**, die rote Jev-Figur zeigt auf das Menü. Stellst du um, läuft sie **von selbst** los (`✓ Jev: jetzt Opus 5.5 · Mittel – läuft.`). „So senden“ in der Figur schickt sie ohne Umstellen ab. Nach 90 Sekunden ohne Umstellen wird sie angehalten. **Codex** (und ohne Figur): Die Nachricht wird einmal angehalten (`⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5.5 ✓`). Erneut senden lässt sie durch. |
 
-Umstellen musst du selbst im Menü: Weder Claude noch Codex lassen ein Plugin Modell oder Effort ändern (in der Claude-Desktop-App live getestet, Details unten). Die Jev-Figur ist ein kleines Fenster unter Windows, das unten rechts am Claude- bzw. Codex-Fenster erscheint. Es liegt im Vordergrund, nimmt nie den Fokus und verschwindet nach ein paar Sekunden oder per Klick.
+Umstellen musst du selbst im Menü: Weder Claude noch Codex lassen ein Plugin Modell oder Effort ändern (in der Claude-Desktop-App live getestet, Details unten). Jev wartet nur, bis du umgestellt hast. Die Claude-App reicht eine Menü-Änderung sofort an den laufenden Chat weiter.
+
+Die Jev-Figur ist ein kleines Fenster unter Windows. Sie erscheint unten rechts am Claude- bzw. Codex-Fenster, liegt im Vordergrund und nimmt nie den Fokus. „Wie?“ klappt einen Satz auf, wo man umstellt. Sonst verschwindet sie nach ein paar Sekunden oder per Klick; wartet eine Nachricht, bleibt sie, bis umgestellt oder gesendet ist.
 
 **Installieren (Claude Code):**
 

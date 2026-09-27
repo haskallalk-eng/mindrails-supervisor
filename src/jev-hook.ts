@@ -6,9 +6,13 @@
 // - Guard mode (`#jev an`, per chat): Jev itself first answers whether the message is a
 //   new task at all. Only then does the policy check model (published benchmarks,
 //   src/model-policy.ts) and effort (weighted per-model evidence, src/model-spectrum.ts).
-//   Fits: a ✓ line. One step off: a card in the chat and the Jev figure at the app's
-//   bottom right; the message runs on. Two or more steps off: the message is held once,
-//   and sending it again lets it through (user rule).
+//   Fits: a ✓ line. One step off: one short line and the Jev figure at the app's bottom
+//   right; the message runs on. Two or more steps off (user rule): in the Claude desktop
+//   app the message waits while the figure points at the menu; as soon as the user
+//   switches, it runs by itself (the app hands a menu change to the running chat at once
+//   and saves it in its session file, which Jev watches). The figure's "So senden" sends
+//   it as it is. Without a switch, and in Codex, the message is held once; sending it
+//   again lets it through.
 // - Neither app lets a plugin change model or effort. Verified live in the Claude desktop
 //   app 2.1.281: skill frontmatter `model`/`effort` changed Claude Code's internal state,
 //   but every request of that message still went out with the menu's model and effort.
@@ -104,8 +108,8 @@ export function effectiveModel(transcriptPath: string, settingsPath = join(homed
   return currentModel(transcriptPath) ?? settingsModel(settingsPath);
 }
 export type Setting = { model: string | null; effort: string | null };
-/** Model and effort the latest reply of a Claude Code transcript really ran on (`message.model`, `perTurnEffort`). */
-export function claudeSetting(transcriptPath: string, maxBytes = 4 * 1024 * 1024): Setting {
+/** The latest reply of a Claude Code transcript: the model and effort it really ran on (`message.model`, `perTurnEffort`) and when. */
+export function claudeLastReply(transcriptPath: string, maxBytes = 4 * 1024 * 1024): Setting & { at: string | null } {
   try {
     const lines = readTail(transcriptPath, maxBytes);
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -113,15 +117,20 @@ export function claudeSetting(transcriptPath: string, maxBytes = 4 * 1024 * 1024
       let o: any; try { o = JSON.parse(lines[i]!); } catch { continue; }
       const model = o.message?.model;
       if (o.type !== 'assistant' || o.isSidechain || typeof model !== 'string' || model === '<synthetic>') continue;
-      return { model, effort: typeof o.perTurnEffort === 'string' ? o.perTurnEffort : typeof o.effort === 'string' ? o.effort : null };
+      return { model, effort: typeof o.perTurnEffort === 'string' ? o.perTurnEffort : typeof o.effort === 'string' ? o.effort : null,
+        at: typeof o.timestamp === 'string' ? o.timestamp : null };
     }
   } catch {}
-  return { model: null, effort: null };
+  return { model: null, effort: null, at: null };
+}
+/** Model and effort the latest reply of a Claude Code transcript really ran on. */
+export function claudeSetting(transcriptPath: string, maxBytes?: number): Setting {
+  const { model, effort } = claudeLastReply(transcriptPath, maxBytes); return { model, effort };
 }
 /** Where the Claude desktop app keeps each chat's menu setting (`model`, `effort`, `cliSessionId`). */
 export const claudeDesktopSessions = () => process.env.JEV_CLAUDE_DESKTOP_SESSIONS ?? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Claude', 'claude-code-sessions');
-/** The live menu setting of a Claude desktop chat, or null outside the desktop app. Read-only. */
-export function claudeMenu(cliSessionId: string, root = claudeDesktopSessions()): Setting | null {
+/** The desktop app's session file of a chat, or null outside the desktop app. */
+export function claudeMenuFile(cliSessionId: string, root = claudeDesktopSessions()): string | null {
   if (!SESSION_ID.test(cliSessionId)) return null;
   try {
     for (const account of readdirSync(root, { withFileTypes: true })) {
@@ -131,16 +140,26 @@ export function claudeMenu(cliSessionId: string, root = claudeDesktopSessions())
         const dir = join(root, account.name, org.name);
         for (const file of readdirSync(dir)) {
           if (!/^local_[\w-]+\.json$/.test(file)) continue;
-          const text = readFileSync(join(dir, file), 'utf8');
-          if (!text.includes(`"${cliSessionId}"`)) continue;
-          const o = JSON.parse(text);
-          if (o.cliSessionId !== cliSessionId) continue;
-          return { model: typeof o.model === 'string' ? o.model : null, effort: typeof o.effort === 'string' ? o.effort : null };
+          if (readMenuFile(join(dir, file), cliSessionId)) return join(dir, file);
         }
       }
     }
   } catch {}
   return null;
+}
+/** The menu setting in one desktop session file, if it belongs to that chat. Read-only; a half-written file reads as null. */
+export function readMenuFile(file: string, cliSessionId: string): Setting | null {
+  try {
+    const text = readFileSync(file, 'utf8');
+    if (!text.includes(`"${cliSessionId}"`)) return null;
+    const o = JSON.parse(text);
+    return o.cliSessionId === cliSessionId ? { model: typeof o.model === 'string' ? o.model : null, effort: typeof o.effort === 'string' ? o.effort : null } : null;
+  } catch { return null; }
+}
+/** The live menu setting of a Claude desktop chat, or null outside the desktop app. Read-only. */
+export function claudeMenu(cliSessionId: string, root = claudeDesktopSessions()): Setting | null {
+  const file = claudeMenuFile(cliSessionId, root);
+  return file ? readMenuFile(file, cliSessionId) : null;
 }
 
 // ---------- app profiles ----------
@@ -296,39 +315,34 @@ export function assess(r: JevAnswer, app: AppProfile, rec = recommend(r, app)): 
     task, cur, target, effort, modelSteps, effortSteps, ladder, why: switchModel ? shortWhy(rec, app, target, cur.model) : '' };
 }
 
-export type Card = { text: string; badge: { title: string; body: string } | null };
-/** The visible result: one ✓ line when everything fits, else a card (and a badge for the Jev figure). */
+/** `steps`: how far off, e.g. "3 Stufen zu hoch"; `how`: one sentence on where to switch (the figure's "Wie?"). */
+export type Card = { text: string; badge: { title: string; steps: string; how: string } | null };
+/**
+ * The visible result, kept short (user rule): one line, and for a held message what to do.
+ * The reason for a model switch is logged and shown by "#jev status", not in the chat.
+ */
 export function jevCard(a: Assessment, app: AppProfile): Card {
   const d = app.display, codex = app.kind === 'codex', stop = a.level === 'stop';
-  const effortWord = codex ? 'Denkaufwand' : 'Effort', task = a.task ? ` (${a.task})` : '';
-  const menu = codex ? 'Im Modellmenü' : 'Unten rechts';
-  const onlyTip = 'Nur eine Empfehlung – noch nicht umgestellt. Die aktuelle Nachricht läuft weiter.';
-  const asIs = 'Ohne Umstellen erneut senden = sie läuft so, wie es gerade eingestellt ist.';
-  const badgeBody = stop ? 'Nachricht angehalten – umstellen, dann erneut senden' : `${menu} umstellen · die Nachricht läuft weiter`;
-  if (!a.cur.model) return { text: `Jev${task}: empfohlen ${showSetting(d, { model: a.target, effort: a.effort })} – die aktuelle Einstellung ist noch unbekannt.`, badge: null };
+  const effortWord = codex ? 'Denkaufwand' : 'Effort';
+  const where = codex ? 'Im Modellmenü' : 'Unten rechts im Eingabefeld das Menü öffnen und';
+  const n = (k: number) => `${k} ${k === 1 ? 'Stufe' : 'Stufen'}`;
+  if (!a.cur.model) return { text: `Jev: empfohlen ${showSetting(d, { model: a.target, effort: a.effort })} – aktuelle Einstellung unbekannt.`, badge: null };
   if (a.kind === 'model') {
-    const [from, to] = [tierOf(a.cur.model, app.tiers)?.label, tierOf(a.target, app.tiers)?.label];
-    const set = `das Modell auf „${d(a.target)}“${a.effort ? ` und den ${effortWord} auf „${effortName(a.effort)}“` : ''} stellen`;
-    return { text: [stop ? `⛔ JEV · ANGEHALTEN – MODELL ${a.modelSteps} STUFEN DANEBEN` : '⚙ JEV · MODELL: BESSERE WAHL',
-      `${showSetting(d, a.cur)} → ${showSetting(d, { model: a.target, effort: a.effort })}${from && to && from !== to ? `   (${from} → ${to})` : ''}`,
-      `Grund: ${a.why}.`,
-      ...(stop ? [`So geht's weiter: ${menu.toLowerCase()} ${set} und die Nachricht erneut senden.`, asIs] : [`${menu} ${set}. ${onlyTip}`])].join('\n'),
-      badge: { title: `Modell → ${d(a.target)}`, body: badgeBody } };
+    const [rc, rt] = [tierOf(a.cur.model, app.tiers)?.rank, tierOf(a.target, app.tiers)?.rank];
+    const steps = `${n(a.modelSteps)} ${rc === undefined || rt === undefined || rc === rt ? 'daneben' : rt > rc ? 'zu schwach' : 'zu stark'}`;
+    const to = showSetting(d, { model: a.target, effort: a.effort }), line = `Modell ${steps}: ${d(a.cur.model)} → ${to}`;
+    return { text: stop ? `⛔ Jev angehalten – ${line}\nModell umstellen und erneut senden.` : `⚙ Jev: ${line}`,
+      badge: { title: `Modell → ${to}`, steps, how: `${where} „${d(a.target)}“${a.effort ? ` mit ${effortWord} „${effortName(a.effort)}“` : ''} wählen.` } };
   }
   if (a.kind === 'effort') {
     const up = a.ladder.indexOf(a.effort!) > a.ladder.indexOf(a.cur.effort!);
-    const steps = `${a.effortSteps} ${a.effortSteps === 1 ? 'STUFE' : 'STUFEN'} ${up ? 'ZU NIEDRIG' : 'ZU HOCH'}`;
-    const scale = a.ladder.map(e => `${e === a.effort ? '◆' : e === a.cur.effort ? '●' : '○'} ${effortName(e)}`).join('   ');
-    const how = `${menu} den ${effortWord} auf „${effortName(a.effort)}“ stellen`;
-    return { text: [stop ? `⛔ JEV · ANGEHALTEN – ${effortWord.toUpperCase()} ${steps}` : `⚙ JEV · ${effortWord.toUpperCase()} ÄNDERN – ${steps}`,
-      `${effortName(a.cur.effort)} → ${effortName(a.effort)} (${a.effort})`,
-      `${scale}      ◆ empfohlen  ● eingestellt`,
-      `${d(a.cur.model)} passt${task}.`,
-      ...(stop ? [`So geht's weiter: ${how.charAt(0).toLowerCase()}${how.slice(1)} und die Nachricht erneut senden.`, asIs] : [`${how}. ${onlyTip}`])].join('\n'),
-      badge: { title: `${effortWord} → ${effortName(a.effort)}`, body: badgeBody } };
+    const steps = `${n(a.effortSteps)} ${up ? 'zu niedrig' : 'zu hoch'}`;
+    const line = `${effortWord} ${steps}: ${effortName(a.cur.effort)} → ${effortName(a.effort)} · ${d(a.cur.model)} ✓`;
+    return { text: stop ? `⛔ Jev angehalten – ${line}\n${effortWord} umstellen und erneut senden.` : `⚙ Jev: ${line}`,
+      badge: { title: `${effortWord} → ${effortName(a.effort)}`, steps, how: `${where} ${effortWord} „${effortName(a.effort)}“ wählen.` } };
   }
   const tip = !a.cur.effort && a.effort && a.ladder.length ? ` Empfohlener ${effortWord}: ${effortName(a.effort)}.` : '';
-  return { text: `✓ Jev${task}: ${showSetting(d, a.cur)} passt.${tip}`, badge: null };
+  return { text: `✓ Jev: ${showSetting(d, a.cur)} passt.${tip}`, badge: null };
 }
 /** The card text for a Jev answer (kept for callers of the one-line version). */
 export const recommendationLine = (r: JevAnswer, app: AppProfile, rec = recommend(r, app)) => jevCard(assess(r, app, rec), app).text;
@@ -343,13 +357,15 @@ export const HELP = (app = 'Claude') => [
   '  #jev status         – aktuelle Einstellung und Jevs letzte Einschätzung',
   '  #jev figur an|aus   – die Jev-Figur unten rechts am Fenster ein- oder ausschalten (#jev figur test zeigt sie)',
 ].join('\n');
-const GUARD_ON = (app: string) => [
+const GUARD_ON = (app: AppProfile) => [
   'Jev ist für DIESEN Chat AN – ab jetzt ohne #jev.',
-  '• Jev prüft jede Nachricht zuerst selbst: Ist das eine neue Aufgabe? Wenn nicht (Antwort, „weiter“, Rückfrage), passiert nichts.',
-  '• Passen Modell und Effort, steht nur ein ✓ im Chat.',
-  '• 1 Stufe daneben: ein Hinweis im Chat und die Jev-Figur unten rechts – die Nachricht läuft weiter.',
-  `• ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wird angehalten. Umstellen und erneut senden – oder einfach erneut senden, dann läuft sie so.`,
-  `• Umstellen musst du selbst: ${app} lässt Modell und Effort nicht von Plugins ändern.`,
+  '• Keine neue Aufgabe (Antwort, „weiter“, Rückfrage): Jev bleibt still.',
+  '• Passt alles: ✓ im Chat.',
+  '• 1 Stufe daneben: eine kurze Zeile und die Jev-Figur unten rechts – die Nachricht läuft.',
+  app.kind === 'claude'
+    ? `• ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wartet. Stellst du um, läuft sie von selbst los; „So senden“ in der Figur schickt sie so ab.`
+    : `• ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wird angehalten. Umstellen und erneut senden – oder einfach erneut senden, dann läuft sie so.`,
+  `• Umstellen musst du selbst: ${app.name} lässt Modell und ${app.kind === 'codex' ? 'Denkaufwand' : 'Effort'} nicht von Plugins ändern.`,
   'Status: #jev status · Figur aus: #jev figur aus · Ausschalten: #jev aus',
 ].join('\n');
 
@@ -367,12 +383,12 @@ export function formatResult(r: InspectResult, description: string | null, app: 
 export function logDecision(stateDir: string, entry: Record<string, unknown>) {
   try { mkdirSync(stateDir, { recursive: true }); appendFileSync(join(stateDir, 'guard-log.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n'); } catch {}
 }
-function lastDecision(stateDir: string, session: string): Record<string, any> | null {
+function lastEvent(stateDir: string, session: string, events = ['checked', 'no-new-task', 'failed']): Record<string, any> | null {
   try {
     const lines = readTail(join(stateDir, 'guard-log.jsonl'), 262_144);
     for (let i = lines.length - 1; i >= 0; i--) {
       let o: any; try { o = JSON.parse(lines[i]!); } catch { continue; }
-      if (o.session === session && ['checked', 'no-new-task', 'failed'].includes(o.event)) return o;
+      if (o.session === session && events.includes(o.event)) return o;
     }
   } catch {}
   return null;
@@ -388,59 +404,137 @@ async function runJev(app: AppProfile, opts: { task?: string; question?: string;
 // ---------- held messages ----------
 /** After a hold, the next message in that chat within this window passes unchecked: set up, or deliberately as is. */
 export const PASS_WINDOW_MS = 15 * 60_000;
-const passFile = (stateDir: string, session: string) => join(stateDir, 'held', `${session.replace(/[^0-9a-z-]/gi, '')}.json`);
-export function markHeld(stateDir: string, session: string, at = Date.now()) { writeJson(passFile(stateDir, session), { at }); }
-/** True (and consumed) when the previous message of this chat was held a moment ago. */
-export function takePass(stateDir: string, session: string, now = Date.now()): boolean {
+const safeName = (session: string) => session.replace(/[^0-9a-z-]/gi, '');
+const passFile = (stateDir: string, session: string) => join(stateDir, 'held', `${safeName(session)}.json`);
+/** A hold: when, Jev's line and where to switch (so a "wie?" right after can be answered in one sentence). */
+export type Held = { at: number; line?: string; how?: string };
+export function markHeld(stateDir: string, session: string, at = Date.now(), info: { line?: string; how?: string } = {}) { writeJson(passFile(stateDir, session), { at, ...info }); }
+/** The hold (consumed) when the previous message of this chat was held a moment ago, else null. */
+export function takeHold(stateDir: string, session: string, now = Date.now()): Held | null {
   const held = readJson(passFile(stateDir, session));
-  if (!held) return false;
+  if (!held) return null;
   try { rmSync(passFile(stateDir, session)); } catch {}
-  return Number.isFinite(held.at) && now - held.at < PASS_WINDOW_MS;
+  return Number.isFinite(held.at) && now - held.at < PASS_WINDOW_MS ? held : null;
+}
+/** True (and consumed) when the previous message of this chat was held a moment ago. */
+export const takePass = (stateDir: string, session: string, now = Date.now()): boolean => takeHold(stateDir, session, now) !== null;
+
+// ---------- did a switch made while the message waited reach its reply? ----------
+const switchFile = (stateDir: string, session: string) => join(stateDir, 'held', `${safeName(session)}.switch.json`);
+export function recordSwitch(stateDir: string, session: string, expect: Setting, at = Date.now()) { writeJson(switchFile(stateDir, session), { at, expect }); }
+/**
+ * The wait relies on the app handing a menu change to the running chat. Whether the reply
+ * really ran on the new setting is checked on the chat's next message, from what the
+ * transcript says the reply ran on, and logged for "#jev status".
+ */
+export function verifySwitch(stateDir: string, session: string, transcriptPath: string): { ok: boolean; expected: Setting; served: Setting } | null {
+  const sw = readJson(switchFile(stateDir, session));
+  if (!sw?.expect || !transcriptPath) return null;
+  const reply = claudeLastReply(transcriptPath);
+  if (!reply.at || !(Date.parse(reply.at) >= sw.at)) return null; // no reply to it yet
+  try { rmSync(switchFile(stateDir, session)); } catch {}
+  const served = { model: reply.model, effort: reply.effort }, expected: Setting = sw.expect;
+  const ok = (!expected.model || sameKey(served.model, expected.model)) && (!expected.effort || served.effort === expected.effort);
+  logDecision(stateDir, { event: 'switch-verified', app: 'claude', session, expected, served, ok });
+  return { ok, expected, served };
 }
 
 // ---------- the Jev figure (Windows) ----------
 const settingsFile = (stateDir: string) => join(stateDir, 'settings.json');
 export const badgeEnabled = (stateDir: string) => readJson(settingsFile(stateDir))?.badge !== false;
 export function setBadge(stateDir: string, enabled: boolean) { writeJson(settingsFile(stateDir), { ...(readJson(settingsFile(stateDir)) ?? {}), badge: enabled }); }
+const badgeFile = (stateDir: string) => join(stateDir, 'badge.json');
+/** `how`: the figure's "Wie?" text. `wait`: the message waits for the switch; the figure offers "So senden". */
+export type Figure = { level: 'note' | 'stop'; title: string; body: string; how?: string; wait?: boolean; seconds?: number };
 /**
  * Shows the Jev figure next to the app's bottom-right corner, where the model and effort menus
- * are: a small always-on-top note that never takes the focus and closes itself (src/jev-badge.ps1).
+ * are: a small always-on-top note that never takes the focus (src/jev-badge.ps1). Returns its id.
  * The texts go through a UTF-8 file, never the command line; a newer figure rewrites it and the
- * older one closes. Started via `cmd /c start`: PowerShell 5.1 spawned directly as a detached
- * Node child exits at once without running the script (tested). Windows only.
+ * older one closes. The figure reports back through two files next to it: badge-ack.json (on
+ * screen, refreshed every second) and badge-send.json ("So senden" pressed). Started via
+ * `cmd /c start`: PowerShell 5.1 spawned directly as a detached Node child exits at once
+ * without running the script (tested). Windows only.
  */
-export function showBadge(stateDir: string, appKind: 'claude' | 'codex', level: 'note' | 'stop', badge: { title: string; body: string }): boolean {
-  if (process.platform !== 'win32' || !badgeEnabled(stateDir)) return false;
+export function showBadge(stateDir: string, appKind: 'claude' | 'codex', fig: Figure): string | null {
+  if (process.platform !== 'win32' || !badgeEnabled(stateDir)) return null;
   let script: string;
-  try { script = join(dirname(fileURLToPath(import.meta.url)), 'jev-badge.ps1'); } catch { return false; }
-  if (!existsSync(script)) return false;
-  const spec = join(stateDir, 'badge.json');
-  try { writeJson(spec, { id: randomUUID(), app: appKind, level, title: badge.title, body: badge.body, seconds: level === 'stop' ? 45 : 15 }); } catch { return false; }
+  try { script = join(dirname(fileURLToPath(import.meta.url)), 'jev-badge.ps1'); } catch { return null; }
+  if (!existsSync(script)) return null;
+  const spec = badgeFile(stateDir), id = randomUUID();
+  try {
+    writeJson(spec, { id, app: appKind, level: fig.level, mode: fig.wait ? 'wait' : 'note', title: fig.title, body: fig.body, how: fig.how ?? '',
+      seconds: fig.seconds ?? (fig.level === 'stop' ? 45 : 15), hookPid: fig.wait ? process.pid : 0, state: 'open' });
+  } catch { return null; }
   try {
     spawn('cmd.exe', ['/d', '/s', '/c', 'start', '""', '/b', 'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', script, '-Spec', spec],
       { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    return true;
-  } catch { return false; }
+    return id;
+  } catch { return null; }
 }
+/** Changes what a shown figure says (state done / sent / held), unless a newer figure has replaced it. */
+export function updateBadge(stateDir: string, id: string, patch: Record<string, unknown>) {
+  const spec = readJson(badgeFile(stateDir));
+  if (spec?.id === id) { try { writeJson(badgeFile(stateDir), { ...spec, ...patch }); } catch {} }
+}
+const sleep = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
+const figureAlive = (stateDir: string, id: string, now = Date.now()) => {
+  const ack = readJson(join(stateDir, 'badge-ack.json'));
+  return ack?.id === id && Number.isFinite(ack.at) && now - ack.at < 4000;
+};
+/** True once the figure reports that it is on screen (it finds no app window when the app is minimized). */
+export async function figureShown(stateDir: string, id: string, timeoutMs = 6000): Promise<boolean> {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) { if (figureAlive(stateDir, id)) return true; await sleep(100); }
+  return false;
+}
+
+// ---------- waiting for the switch (Claude desktop) ----------
+/** How long a message two or more steps off waits for the switch before it is held (hooks.json allows 150 s in all). */
+export const WAIT_MS = 90_000;
+const HOOK_BUDGET_MS = 135_000, SETTLE_MS = 500, HOOK_START = Date.now();
+export type WaitResult = { kind: 'switched'; setting: Setting } | { kind: 'as-is' } | { kind: 'gone' } | { kind: 'timeout' };
+/**
+ * Waits until the menu shows a setting that is no longer two or more steps off (`fits`), the
+ * user presses "So senden" (`sent`), the figure is gone (`shown`), or the time is up.
+ */
+export async function waitForSwitch(o: { from: Setting; menu: () => Setting | null; fits: (s: Setting) => boolean; sent: () => boolean; shown: () => boolean; deadline: number; pollMs?: number }): Promise<WaitResult> {
+  let seen = `${o.from.model}|${o.from.effort}`;
+  while (Date.now() < o.deadline) {
+    await sleep(o.pollMs ?? 250);
+    if (o.sent()) return { kind: 'as-is' };
+    if (!o.shown()) return { kind: 'gone' };
+    const now = o.menu();
+    if (!now || `${now.model}|${now.effort}` === seen) continue;
+    seen = `${now.model}|${now.effort}`;
+    if (o.fits(now)) return { kind: 'switched', setting: now };
+  }
+  return { kind: 'timeout' };
+}
+const withSetting = (app: AppProfile, s: Setting): AppProfile => ({ ...app, current: () => s });
 
 /**
  * Looks at one message. `gate`: Jev first decides whether it is a new task at all.
- * Fits: one ✓ line. One step off: a card and the Jev figure, the message runs on.
- * Two or more steps off: the message is held once with the card; sending again passes.
- * `command`: the "#jev …" prefix the model should ignore. `lead`: text before Jev's card.
+ * Fits: one ✓ line. One step off: one line and the Jev figure, the message runs on.
+ * Two or more steps off: in the Claude desktop app the message waits for the switch and then
+ * runs by itself; otherwise (and without a switch) it is held once; sending again passes.
+ * `command`: the "#jev …" prefix the model should ignore. `lead`: text before Jev's line.
  */
 export async function checkMessage(event: any, appKind: 'claude' | 'codex', app: AppProfile, session: string, prompt: string, stateDir: string,
   opts: { gate: boolean; command?: string; lead?: string }): Promise<void> {
-  const emit = (line: string | null) => {
+  const emit = (line: string | null, context?: string) => {
     const out: Record<string, unknown> = {};
     const text = [opts.lead, line].filter(Boolean).join(line?.includes('\n') ? '\n' : ' ');
     if (text) out.systemMessage = text;
-    if (opts.command) out.hookSpecificOutput = { hookEventName: 'UserPromptSubmit', additionalContext: `Hinweis: Das vorangestellte „${opts.command}“ ist ein Befehl an das Jev-Plugin und gehört nicht zur Nachricht.` };
+    const notes = [opts.command ? `Hinweis: Das vorangestellte „${opts.command}“ ist ein Befehl an das Jev-Plugin und gehört nicht zur Nachricht.` : '', context ?? ''].filter(Boolean);
+    if (notes.length) out.hookSpecificOutput = { hookEventName: 'UserPromptSubmit', additionalContext: notes.join('\n') };
     if (Object.keys(out).length) process.stdout.write(JSON.stringify(out) + '\n');
   };
-  if (takePass(stateDir, session)) {
+  const held = takeHold(stateDir, session);
+  if (held) {
     logDecision(stateDir, { event: 'passed-after-hold', app: appKind, session, current: app.current() });
-    return emit('Jev: Die angehaltene Nachricht geht jetzt durch.');
+    return emit('Jev: geht jetzt durch.', held.line
+      ? `Hinweis vom Jev-Plugin: Es hatte die vorige Nachricht angehalten („${held.line}“).${held.how ? ` Umstellen: ${held.how}` : ''} Fragt der Nutzer, wie das geht, antworte in einem Satz; sonst ignoriere diesen Hinweis.`
+      : undefined);
   }
   let r: InspectResult;
   try { r = await runJev(app, { task: prompt, gate: opts.gate }); }
@@ -450,30 +544,73 @@ export async function checkMessage(event: any, appKind: 'claude' | 'codex', app:
     logDecision(stateDir, { event: 'no-new-task', app: appKind, session, newTask: r.newTask.yes });
     return emit(null);
   }
-  const rec = recommend(r, app), a = assess(r, app, rec), card = jevCard(a, app);
+  const rec = recommend(r, app), a = assess(r, app, rec), card = jevCard(a, app), fig = card.badge, line = card.text.split('\n')[0]!;
   logDecision(stateDir, { event: 'checked', app: appKind, session, newTask: r.newTask?.yes ?? null, current: a.cur, recommended: a.target, effort: a.effort,
     level: a.level, modelSteps: a.modelSteps, effortSteps: a.effortSteps, taskKind: r.taskKind?.choice ?? null, difficulty: r.difficulty?.choice ?? null,
-    reason: rec.policy && 'reason' in rec.policy ? rec.policy.reason : null, line: card.text.split('\n')[0] });
-  if (card.badge && a.level !== 'fits') showBadge(stateDir, appKind, a.level, card.badge);
-  if (a.level === 'stop') { markHeld(stateDir, session); return block([opts.lead, card.text].filter(Boolean).join('\n')); }
-  emit(card.text);
+    reason: rec.policy && 'reason' in rec.policy ? rec.policy.reason : null, line, why: a.why || null });
+  if (a.level === 'fits' || !fig) return emit(card.text);
+  if (a.level === 'note') {
+    showBadge(stateDir, appKind, { level: 'note', title: fig.title, body: `${fig.steps} · die Nachricht läuft`, how: fig.how });
+    return emit(card.text);
+  }
+  // Two or more steps off. Claude desktop: the message waits, the figure points at the menu, and a
+  // switch lets it run by itself (the app saves the menu in its session file and hands the change
+  // to the running chat). Without the figure on screen nothing would explain the wait: hold instead.
+  const menuFile = appKind === 'claude' ? claudeMenuFile(session) : null;
+  const id = menuFile
+    ? showBadge(stateDir, appKind, { level: 'stop', wait: true, title: fig.title, body: `${fig.steps} · die Nachricht wartet, bis du umstellst`,
+      how: `${fig.how} Die Nachricht startet dann von selbst.`, seconds: Math.ceil(WAIT_MS / 1000) + 15 })
+    : showBadge(stateDir, appKind, { level: 'stop', title: fig.title, body: `${fig.steps} · angehalten – umstellen, dann erneut senden`, how: fig.how });
+  if (menuFile && id && await figureShown(stateDir, id)) {
+    const started = Date.now();
+    let aliveAt = started; // the figure rewrites its ack every second; a read in between must not count as gone
+    const res = await waitForSwitch({ from: a.cur, menu: () => readMenuFile(menuFile, session),
+      fits: s => { const now = withSetting(app, s); return assess(r, now, recommend(r, now)).level !== 'stop'; },
+      sent: () => readJson(join(stateDir, 'badge-send.json'))?.id === id,
+      shown: () => { if (figureAlive(stateDir, id)) aliveAt = Date.now(); return readJson(badgeFile(stateDir))?.id === id && Date.now() - aliveAt < 5000; },
+      deadline: Math.min(started + WAIT_MS, HOOK_START + HOOK_BUDGET_MS) });
+    const waitedMs = Date.now() - started;
+    if (res.kind === 'switched') {
+      const now = showSetting(app.display, res.setting);
+      updateBadge(stateDir, id, { state: 'done', title: `✓ ${now}`, body: 'Die Nachricht läuft.' });
+      await sleep(SETTLE_MS); // the app hands the switch to the chat right after saving it: let it arrive first
+      recordSwitch(stateDir, session, res.setting);
+      logDecision(stateDir, { event: 'switched-while-waiting', app: appKind, session, from: a.cur, to: res.setting, waitedMs });
+      return emit(`✓ Jev: jetzt ${now} – läuft.`);
+    }
+    if (res.kind === 'as-is') {
+      updateBadge(stateDir, id, { state: 'sent' });
+      logDecision(stateDir, { event: 'sent-as-is', app: appKind, session, current: a.cur, waitedMs });
+      return emit(`Jev: läuft wie eingestellt (${showSetting(app.display, a.cur)}).`);
+    }
+    logDecision(stateDir, { event: res.kind === 'gone' ? 'wait-figure-gone' : 'wait-timeout', app: appKind, session, waitedMs });
+  }
+  // Held: a waiting figure (also one that comes up late) must no longer promise a start by itself.
+  if (menuFile && id) updateBadge(stateDir, id, { state: 'held', title: 'Angehalten', body: 'Umstellen und erneut senden.' });
+  markHeld(stateDir, session, Date.now(), { line, how: fig.how });
+  block([opts.lead, card.text].filter(Boolean).join('\n'));
 }
 
 function statusText(appKind: 'claude' | 'codex', session: string, stateDir: string, app: AppProfile): string {
-  const on = guardEnabled(stateDir, session), last = lastDecision(stateDir, session);
-  const source = appKind === 'codex' ? 'laut Verlauf' : claudeMenu(session) ? 'laut Menü der App' : 'laut letzter Antwort';
+  const on = guardEnabled(stateDir, session), last = lastEvent(stateDir, session), sw = lastEvent(stateDir, session, ['switch-verified']);
+  const menu = appKind === 'claude' && claudeMenu(session) !== null;
+  const source = appKind === 'codex' ? 'laut Verlauf' : menu ? 'laut Menü der App' : 'laut letzter Antwort';
+  const hold = menu && badgeEnabled(stateDir) ? `ab ${STOP_STEPS} Stufen daneben wartet die Nachricht, bis du umstellst` : `ab ${STOP_STEPS} Stufen daneben wird einmal angehalten`;
   return ['Jev-Status für diesen Chat',
-    `  Jev:          ${on ? `AN – prüft jede Nachricht selbst; ab ${STOP_STEPS} Stufen daneben wird einmal angehalten` : 'AUS (einschalten: #jev an)'}`,
+    `  Jev:          ${on ? `AN – prüft jede Nachricht selbst; ${hold}` : 'AUS (einschalten: #jev an)'}`,
     `  Eingestellt:  ${showSetting(app.display, app.current())} (${source})`,
     last ? `  Zuletzt:      ${last.event === 'no-new-task' ? 'keine neue Aufgabe – nichts zu tun' : last.event === 'failed' ? `keine Einschätzung (${last.reason})` : last.line}` : null,
+    last?.why ? `  Grund:        ${last.why}` : null,
+    sw ? `  Umstellung beim Warten: ${sw.ok ? 'hat gewirkt' : 'hat NICHT gewirkt'} – die Antwort lief auf ${showSetting(app.display, sw.served ?? {})}` : null,
     `  Jev-Figur:    ${badgeEnabled(stateDir) ? 'an' : 'aus'}${process.platform === 'win32' ? '' : ' (nur unter Windows)'}`,
-    `  Umstellen geht nur im Menü: ${app.name} lässt Modell und Effort nicht von Plugins ändern.`,
+    `  Umstellen geht nur im Menü: ${app.name} lässt Modell und ${appKind === 'codex' ? 'Denkaufwand' : 'Effort'} nicht von Plugins ändern.`,
   ].filter(Boolean).join('\n');
 }
 
 export async function handle(event: any, appKind: 'claude' | 'codex', stateDir = stateDirectory()): Promise<void> {
   const session = String(event.session_id ?? event.thread_id ?? '');
   if (SESSION_ID.test(session)) { try { writeFocus(stateDir, { kind: appKind, id: session, at: Date.now(), cwd: event.cwd ?? null }); } catch {} }
+  if (appKind === 'claude' && SESSION_ID.test(session)) { try { verifySwitch(stateDir, session, String(event.transcript_path ?? '')); } catch {} }
   const prompt = String(event.prompt ?? '');
   const command = parseJevCommand(prompt);
   const app = appKind === 'codex' ? codexProfile(event) : claudeProfile(event);
@@ -484,13 +621,15 @@ export async function handle(event: any, appKind: 'claude' | 'codex', stateDir =
     if (command.kind === 'status') return block(statusText(appKind, session, stateDir, app));
     if (command.kind === 'badge') {
       if (command.action !== 'test') { setBadge(stateDir, command.action === 'an'); return block(`Jev-Figur ist ${command.action === 'an' ? 'AN – sie erscheint unten rechts am Fenster, wenn Modell oder Effort nicht passen' : 'AUS – Jev meldet sich nur noch im Chat'}.`); }
-      const shown = showBadge(stateDir, appKind, 'note', { title: `${appKind === 'codex' ? 'Denkaufwand' : 'Effort'} → Mittel`, body: 'So sieht die Jev-Figur aus · ein Klick schließt sie' });
+      const word = appKind === 'codex' ? 'Denkaufwand' : 'Effort';
+      const shown = showBadge(stateDir, appKind, { level: 'note', title: `${word} → Mittel`, body: 'So sieht die Jev-Figur aus · ein Klick schließt sie',
+        how: `${appKind === 'codex' ? 'Im Modellmenü' : 'Unten rechts im Eingabefeld das Menü öffnen und'} ${word} „Mittel“ wählen.` });
       return block(shown ? 'Jev-Figur: Test läuft – sie erscheint gleich unten rechts am Fenster und verschwindet nach 15 Sekunden.' : 'Jev-Figur ist aus (#jev figur an) oder hier nicht verfügbar (nur Windows).');
     }
     if (command.kind === 'guard') {
       if (!SESSION_ID.test(session)) return command.rest ? undefined : block('Jev: Dieser Chat hat keine erkennbare ID – nicht aktiviert.');
       setGuard(stateDir, session, command.enabled);
-      if (!command.rest) return block(command.enabled ? GUARD_ON(app.name) : `Jev ist für diesen Chat AUS. Nachrichten gehen wieder unverändert an ${app.name}.`);
+      if (!command.rest) return block(command.enabled ? GUARD_ON(app) : `Jev ist für diesen Chat AUS. Nachrichten gehen wieder unverändert an ${app.name}.`);
       // Text after the command is a normal message: never hold it back.
       if (!command.enabled) { process.stdout.write(JSON.stringify({ systemMessage: 'Jev ist für diesen Chat jetzt AUS.', hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `Hinweis: Das vorangestellte „${commandWord(command.rest)}“ ist ein Befehl an das Jev-Plugin und gehört nicht zur Nachricht.` } }) + '\n'); return; }
       return checkMessage(event, appKind, app, session, command.rest, stateDir, { gate: false, command: commandWord(command.rest), lead: 'Jev ist für diesen Chat jetzt AN.' });

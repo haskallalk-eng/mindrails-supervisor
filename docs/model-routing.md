@@ -65,23 +65,32 @@ Computer use is not used for this: it would need screen access every time, is sl
 
    | Distance | Result |
    |---|---|
-   | 0 | a `✓` line |
-   | 1 | a card as `systemMessage` plus the Jev figure; the message runs |
-   | ≥ 2 | the message is held once (`decision: block`) with the card plus a red Jev figure |
+   | 0 | `✓ Jev: Opus 5.5 · Mittel passt.` |
+   | 1 | one line as `systemMessage`, e.g. `⚙ Jev: Effort 1 Stufe zu hoch: Hoch → Mittel · Opus 5.5 ✓` (Codex: `Denkaufwand`), plus the Jev figure; the message runs |
+   | ≥ 2 | Claude desktop app: the message **waits for the switch** (below). Codex, or without the figure on screen: held once (`decision: block`) with `⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5.5 ✓` and `Effort umstellen und erneut senden.` |
 
-   The card shows `⚙ JEV · EFFORT ÄNDERN – 1 STUFE ZU HOCH` (Codex: `DENKAUFWAND`), `Hoch → Mittel (medium)` and a scale such as `○ Niedrig ◆ Mittel ● Hoch ○ Extra hoch ○ Max` (◆ recommended, ● set). For a model switch it shows `Fable 5.1 · Max → Opus 5.5 · Mittel (Spitze → Stark)` with the benchmark reason.
-4. **Held messages pass on the next send.** After a hold, the next message in that chat within 15 minutes (`PASS_WINDOW_MS`) passes without a new Jev call, whether the user switched the setting or wants it as is. The desktop app's "edit prompt" puts the text back; Enter sends it.
-5. **Current setting.** For the Claude desktop app, the model and effort come from the app's own chat file: `%APPDATA%\Claude\claude-code-sessions\…\local_*.json`, matched by `cliSessionId` and read-only (about 25 ms). A menu change therefore counts at once. Without the desktop app, they come from the latest reply in the transcript (`message.model`, and `perTurnEffort` or else `effort`). For Codex they come from the rollout: the hook input has `model`, but no effort.
-6. **Jev figure (Windows).** `src/jev-badge.ps1`, copied next to the hook bundle, shows a small WPF window near the bottom right of the Claude window (process `claude`) or Codex window (process `ChatGPT`), where the model and effort menus are.
+   The lines are deliberately short (user rule). A model line reads `⚙ Jev: Modell 1 Stufe zu stark: Fable 5.1 → Opus 5.5 · Mittel`; the benchmark reason goes to the log and `#jev status`.
+4. **Waiting for the switch (Claude desktop app, `WAIT_MS` = 90 s).** The hook shows the red figure in wait mode and keeps the prompt submission open while it polls the chat's desktop session file every 250 ms.
+   - The desktop app saves a menu change to that file at once and hands it to the running Claude Code process (`applyFlagSettings({effortLevel})`, pushed even while a turn runs). Claude Code reads the effort from its app state for each request.
+   - As soon as the file shows a setting that is no longer two or more steps off, the hook waits 500 ms for that hand-over, turns the figure green (`✓ Opus 5.5 · Mittel`), prints `✓ Jev: jetzt Opus 5.5 · Mittel – läuft.` and lets the message through. A setting still two or more steps off keeps it waiting.
+   - "So senden" in the figure writes `badge-send.json`; the message runs as it is.
+   - Timeout, or the figure gone (it reports itself every second in `badge-ack.json`; replaced by a newer figure): the message is held as below.
+   - Live-tested with the real Jev service and figure against a copy of a session file: figure on screen after 2.6–3.5 s; after the switch the hook returned in 0.58 s, after "So senden" in 0.17 s.
+   - Whether each reply really ran on the new setting is checked on the chat's next message from the transcript (`switch-verified` in the log, shown by `#jev status`). For an effort change the evidence is the app code above. For a model change it rests on this check.
+   - `hooks.json` allows the hook 150 s in all.
+5. **Held messages pass on the next send.** After a hold, the next message in that chat within 15 minutes (`PASS_WINDOW_MS`) passes without a new Jev call, whether the user switched the setting or wants it as is. The desktop app's "edit prompt" puts the text back; Enter sends it. If the user asks "wie?" instead, `additionalContext` carries the hold and where to switch, so the model can answer in one sentence.
+6. **Current setting.** For the Claude desktop app, the model and effort come from the app's own chat file: `%APPDATA%\Claude\claude-code-sessions\…\local_*.json`, matched by `cliSessionId` and read-only (about 25 ms). A menu change therefore counts at once. Without the desktop app, they come from the latest reply in the transcript (`message.model`, and `perTurnEffort` or else `effort`). For Codex they come from the rollout: the hook input has `model`, but no effort.
+7. **Jev figure (Windows).** `src/jev-badge.ps1`, copied next to the hook bundle, shows a small WPF window near the bottom right of the Claude window (process `claude`) or Codex window (process `ChatGPT`), where the model and effort menus are.
    - It is topmost and does not show in the taskbar or Alt+Tab. `ShowActivated=false` plus `WS_EX_NOACTIVATE` keep it from taking the focus.
    - It is DPI-aware per monitor.
-   - It closes on click, or after 15 s (note) or 45 s (hold).
-   - The hook writes the texts to `badge.json` in the state directory. This avoids command-line quoting, and a newer figure replaces an older one.
+   - "Wie?" opens one sentence on where to switch; the figure grows upwards and keeps its corner.
+   - A note closes on click, or after 15 s (45 s for a Codex hold). In wait mode, clicks outside "Wie?" and "So senden" do nothing. The figure follows the hook's verdict: green and gone after 2.5 s (switched), gone (sent as is), red and gone after 6 s (held). It also closes when the waiting hook process is gone, e.g. after the message was stopped in the app (tested: 0.5 s).
+   - The hook writes the texts and the verdict to `badge.json` in the state directory. This avoids command-line quoting, and a newer figure replaces an older one. The figure answers through `badge-ack.json` and `badge-send.json`.
    - It is started through `cmd /c start`. A Node child spawned `detached` ran PowerShell 5.1 for 90 ms without executing the script (tested).
-   - `#jev figur aus|an|test` switches it off, back on, or shows a sample.
-7. **Prefix commands.** `#jev an <text>`, `#jev aus <text>` and `#jev <text>` send the text; `additionalContext` tells the model to ignore the command prefix. Only bare commands are held, because they have nothing to send: `#jev an`, `#jev aus`, `#jev`, `#jev? <question>`, `#jev status`, `#jev figur …` and `#jev hilfe`.
+   - `#jev figur aus|an|test` switches it off, back on, or shows a sample. With the figure off, a message two or more steps off is held at once, because nothing would explain a wait.
+8. **Prefix commands.** `#jev an <text>`, `#jev aus <text>` and `#jev <text>` send the text; `additionalContext` tells the model to ignore the command prefix. Only bare commands are held, because they have nothing to send: `#jev an`, `#jev aus`, `#jev`, `#jev? <question>`, `#jev status`, `#jev figur …` and `#jev hilfe`.
 
-Every check is logged to `guard-log.jsonl` as `checked` (with level and steps), `no-new-task`, `passed-after-hold` or `failed`, without prompt text. `#jev status` shows the latest entry.
+Every check is logged to `guard-log.jsonl` as `checked` (with level, steps and the reason), `no-new-task`, `switched-while-waiting`, `sent-as-is`, `wait-timeout`, `wait-figure-gone`, `switch-verified`, `passed-after-hold` or `failed`, without prompt text. `#jev status` shows the latest check, its reason and whether the last switch during a wait reached the reply.
 
 **Why Jev does not switch model or effort itself (tested live on 2026-09-27, Claude desktop app, Claude Code 2.1.281).**
 

@@ -21797,7 +21797,7 @@ var settingsModel = (settingsPath = join3(homedir3(), ".claude", "settings.json"
 function effectiveModel(transcriptPath, settingsPath = join3(homedir3(), ".claude", "settings.json")) {
   return currentModel(transcriptPath) ?? settingsModel(settingsPath);
 }
-function claudeSetting(transcriptPath, maxBytes = 4 * 1024 * 1024) {
+function claudeLastReply(transcriptPath, maxBytes = 4 * 1024 * 1024) {
   try {
     const lines = readTail(transcriptPath, maxBytes);
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -21810,14 +21810,22 @@ function claudeSetting(transcriptPath, maxBytes = 4 * 1024 * 1024) {
       }
       const model = o.message?.model;
       if (o.type !== "assistant" || o.isSidechain || typeof model !== "string" || model === "<synthetic>") continue;
-      return { model, effort: typeof o.perTurnEffort === "string" ? o.perTurnEffort : typeof o.effort === "string" ? o.effort : null };
+      return {
+        model,
+        effort: typeof o.perTurnEffort === "string" ? o.perTurnEffort : typeof o.effort === "string" ? o.effort : null,
+        at: typeof o.timestamp === "string" ? o.timestamp : null
+      };
     }
   } catch {
   }
-  return { model: null, effort: null };
+  return { model: null, effort: null, at: null };
+}
+function claudeSetting(transcriptPath, maxBytes) {
+  const { model, effort } = claudeLastReply(transcriptPath, maxBytes);
+  return { model, effort };
 }
 var claudeDesktopSessions = () => process.env.JEV_CLAUDE_DESKTOP_SESSIONS ?? join3(process.env.APPDATA ?? join3(homedir3(), "AppData", "Roaming"), "Claude", "claude-code-sessions");
-function claudeMenu(cliSessionId, root = claudeDesktopSessions()) {
+function claudeMenuFile(cliSessionId, root = claudeDesktopSessions()) {
   if (!SESSION_ID.test(cliSessionId)) return null;
   try {
     for (const account of readdirSync3(root, { withFileTypes: true })) {
@@ -21827,17 +21835,27 @@ function claudeMenu(cliSessionId, root = claudeDesktopSessions()) {
         const dir = join3(root, account.name, org.name);
         for (const file2 of readdirSync3(dir)) {
           if (!/^local_[\w-]+\.json$/.test(file2)) continue;
-          const text2 = readFileSync3(join3(dir, file2), "utf8");
-          if (!text2.includes(`"${cliSessionId}"`)) continue;
-          const o = JSON.parse(text2);
-          if (o.cliSessionId !== cliSessionId) continue;
-          return { model: typeof o.model === "string" ? o.model : null, effort: typeof o.effort === "string" ? o.effort : null };
+          if (readMenuFile(join3(dir, file2), cliSessionId)) return join3(dir, file2);
         }
       }
     }
   } catch {
   }
   return null;
+}
+function readMenuFile(file2, cliSessionId) {
+  try {
+    const text2 = readFileSync3(file2, "utf8");
+    if (!text2.includes(`"${cliSessionId}"`)) return null;
+    const o = JSON.parse(text2);
+    return o.cliSessionId === cliSessionId ? { model: typeof o.model === "string" ? o.model : null, effort: typeof o.effort === "string" ? o.effort : null } : null;
+  } catch {
+    return null;
+  }
+}
+function claudeMenu(cliSessionId, root = claudeDesktopSessions()) {
+  const file2 = claudeMenuFile(cliSessionId, root);
+  return file2 ? readMenuFile(file2, cliSessionId) : null;
 }
 var CLAUDE_EFFORT_IDS = ["low", "medium", "high", "xhigh", "max"];
 function claudeProfile(event) {
@@ -21983,43 +22001,32 @@ function assess(r, app, rec = recommend(r, app)) {
 }
 function jevCard(a, app) {
   const d = app.display, codex = app.kind === "codex", stop = a.level === "stop";
-  const effortWord = codex ? "Denkaufwand" : "Effort", task = a.task ? ` (${a.task})` : "";
-  const menu = codex ? "Im Modellmen\xFC" : "Unten rechts";
-  const onlyTip = "Nur eine Empfehlung \u2013 noch nicht umgestellt. Die aktuelle Nachricht l\xE4uft weiter.";
-  const asIs = "Ohne Umstellen erneut senden = sie l\xE4uft so, wie es gerade eingestellt ist.";
-  const badgeBody = stop ? "Nachricht angehalten \u2013 umstellen, dann erneut senden" : `${menu} umstellen \xB7 die Nachricht l\xE4uft weiter`;
-  if (!a.cur.model) return { text: `Jev${task}: empfohlen ${showSetting(d, { model: a.target, effort: a.effort })} \u2013 die aktuelle Einstellung ist noch unbekannt.`, badge: null };
+  const effortWord = codex ? "Denkaufwand" : "Effort";
+  const where = codex ? "Im Modellmen\xFC" : "Unten rechts im Eingabefeld das Men\xFC \xF6ffnen und";
+  const n = (k) => `${k} ${k === 1 ? "Stufe" : "Stufen"}`;
+  if (!a.cur.model) return { text: `Jev: empfohlen ${showSetting(d, { model: a.target, effort: a.effort })} \u2013 aktuelle Einstellung unbekannt.`, badge: null };
   if (a.kind === "model") {
-    const [from, to] = [tierOf(a.cur.model, app.tiers)?.label, tierOf(a.target, app.tiers)?.label];
-    const set2 = `das Modell auf \u201E${d(a.target)}\u201C${a.effort ? ` und den ${effortWord} auf \u201E${effortName(a.effort)}\u201C` : ""} stellen`;
+    const [rc, rt] = [tierOf(a.cur.model, app.tiers)?.rank, tierOf(a.target, app.tiers)?.rank];
+    const steps = `${n(a.modelSteps)} ${rc === void 0 || rt === void 0 || rc === rt ? "daneben" : rt > rc ? "zu schwach" : "zu stark"}`;
+    const to = showSetting(d, { model: a.target, effort: a.effort }), line = `Modell ${steps}: ${d(a.cur.model)} \u2192 ${to}`;
     return {
-      text: [
-        stop ? `\u26D4 JEV \xB7 ANGEHALTEN \u2013 MODELL ${a.modelSteps} STUFEN DANEBEN` : "\u2699 JEV \xB7 MODELL: BESSERE WAHL",
-        `${showSetting(d, a.cur)} \u2192 ${showSetting(d, { model: a.target, effort: a.effort })}${from && to && from !== to ? `   (${from} \u2192 ${to})` : ""}`,
-        `Grund: ${a.why}.`,
-        ...stop ? [`So geht's weiter: ${menu.toLowerCase()} ${set2} und die Nachricht erneut senden.`, asIs] : [`${menu} ${set2}. ${onlyTip}`]
-      ].join("\n"),
-      badge: { title: `Modell \u2192 ${d(a.target)}`, body: badgeBody }
+      text: stop ? `\u26D4 Jev angehalten \u2013 ${line}
+Modell umstellen und erneut senden.` : `\u2699 Jev: ${line}`,
+      badge: { title: `Modell \u2192 ${to}`, steps, how: `${where} \u201E${d(a.target)}\u201C${a.effort ? ` mit ${effortWord} \u201E${effortName(a.effort)}\u201C` : ""} w\xE4hlen.` }
     };
   }
   if (a.kind === "effort") {
     const up = a.ladder.indexOf(a.effort) > a.ladder.indexOf(a.cur.effort);
-    const steps = `${a.effortSteps} ${a.effortSteps === 1 ? "STUFE" : "STUFEN"} ${up ? "ZU NIEDRIG" : "ZU HOCH"}`;
-    const scale = a.ladder.map((e) => `${e === a.effort ? "\u25C6" : e === a.cur.effort ? "\u25CF" : "\u25CB"} ${effortName(e)}`).join("   ");
-    const how = `${menu} den ${effortWord} auf \u201E${effortName(a.effort)}\u201C stellen`;
+    const steps = `${n(a.effortSteps)} ${up ? "zu niedrig" : "zu hoch"}`;
+    const line = `${effortWord} ${steps}: ${effortName(a.cur.effort)} \u2192 ${effortName(a.effort)} \xB7 ${d(a.cur.model)} \u2713`;
     return {
-      text: [
-        stop ? `\u26D4 JEV \xB7 ANGEHALTEN \u2013 ${effortWord.toUpperCase()} ${steps}` : `\u2699 JEV \xB7 ${effortWord.toUpperCase()} \xC4NDERN \u2013 ${steps}`,
-        `${effortName(a.cur.effort)} \u2192 ${effortName(a.effort)} (${a.effort})`,
-        `${scale}      \u25C6 empfohlen  \u25CF eingestellt`,
-        `${d(a.cur.model)} passt${task}.`,
-        ...stop ? [`So geht's weiter: ${how.charAt(0).toLowerCase()}${how.slice(1)} und die Nachricht erneut senden.`, asIs] : [`${how}. ${onlyTip}`]
-      ].join("\n"),
-      badge: { title: `${effortWord} \u2192 ${effortName(a.effort)}`, body: badgeBody }
+      text: stop ? `\u26D4 Jev angehalten \u2013 ${line}
+${effortWord} umstellen und erneut senden.` : `\u2699 Jev: ${line}`,
+      badge: { title: `${effortWord} \u2192 ${effortName(a.effort)}`, steps, how: `${where} ${effortWord} \u201E${effortName(a.effort)}\u201C w\xE4hlen.` }
     };
   }
   const tip = !a.cur.effort && a.effort && a.ladder.length ? ` Empfohlener ${effortWord}: ${effortName(a.effort)}.` : "";
-  return { text: `\u2713 Jev${task}: ${showSetting(d, a.cur)} passt.${tip}`, badge: null };
+  return { text: `\u2713 Jev: ${showSetting(d, a.cur)} passt.${tip}`, badge: null };
 }
 var recommendationLine = (r, app, rec = recommend(r, app)) => jevCard(assess(r, app, rec), app).text;
 var HELP = (app = "Claude") => [
@@ -22034,11 +22041,11 @@ var HELP = (app = "Claude") => [
 ].join("\n");
 var GUARD_ON = (app) => [
   "Jev ist f\xFCr DIESEN Chat AN \u2013 ab jetzt ohne #jev.",
-  "\u2022 Jev pr\xFCft jede Nachricht zuerst selbst: Ist das eine neue Aufgabe? Wenn nicht (Antwort, \u201Eweiter\u201C, R\xFCckfrage), passiert nichts.",
-  "\u2022 Passen Modell und Effort, steht nur ein \u2713 im Chat.",
-  "\u2022 1 Stufe daneben: ein Hinweis im Chat und die Jev-Figur unten rechts \u2013 die Nachricht l\xE4uft weiter.",
-  `\u2022 ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wird angehalten. Umstellen und erneut senden \u2013 oder einfach erneut senden, dann l\xE4uft sie so.`,
-  `\u2022 Umstellen musst du selbst: ${app} l\xE4sst Modell und Effort nicht von Plugins \xE4ndern.`,
+  "\u2022 Keine neue Aufgabe (Antwort, \u201Eweiter\u201C, R\xFCckfrage): Jev bleibt still.",
+  "\u2022 Passt alles: \u2713 im Chat.",
+  "\u2022 1 Stufe daneben: eine kurze Zeile und die Jev-Figur unten rechts \u2013 die Nachricht l\xE4uft.",
+  app.kind === "claude" ? `\u2022 ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wartet. Stellst du um, l\xE4uft sie von selbst los; \u201ESo senden\u201C in der Figur schickt sie so ab.` : `\u2022 ${STOP_STEPS} oder mehr Stufen daneben: Die Nachricht wird angehalten. Umstellen und erneut senden \u2013 oder einfach erneut senden, dann l\xE4uft sie so.`,
+  `\u2022 Umstellen musst du selbst: ${app.name} l\xE4sst Modell und ${app.kind === "codex" ? "Denkaufwand" : "Effort"} nicht von Plugins \xE4ndern.`,
   "Status: #jev status \xB7 Figur aus: #jev figur aus \xB7 Ausschalten: #jev aus"
 ].join("\n");
 function formatResult(r, description, app) {
@@ -22059,7 +22066,7 @@ function logDecision(stateDir, entry) {
   } catch {
   }
 }
-function lastDecision(stateDir, session) {
+function lastEvent(stateDir, session, events = ["checked", "no-new-task", "failed"]) {
   try {
     const lines = readTail(join3(stateDir, "guard-log.jsonl"), 262144);
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -22069,7 +22076,7 @@ function lastDecision(stateDir, session) {
       } catch {
         continue;
       }
-      if (o.session === session && ["checked", "no-new-task", "failed"].includes(o.event)) return o;
+      if (o.session === session && events.includes(o.event)) return o;
     }
   } catch {
   }
@@ -22091,38 +22098,70 @@ async function runJev(app, opts) {
   });
 }
 var PASS_WINDOW_MS = 15 * 6e4;
-var passFile = (stateDir, session) => join3(stateDir, "held", `${session.replace(/[^0-9a-z-]/gi, "")}.json`);
-function markHeld(stateDir, session, at = Date.now()) {
-  writeJson(passFile(stateDir, session), { at });
+var safeName = (session) => session.replace(/[^0-9a-z-]/gi, "");
+var passFile = (stateDir, session) => join3(stateDir, "held", `${safeName(session)}.json`);
+function markHeld(stateDir, session, at = Date.now(), info = {}) {
+  writeJson(passFile(stateDir, session), { at, ...info });
 }
-function takePass(stateDir, session, now = Date.now()) {
+function takeHold(stateDir, session, now = Date.now()) {
   const held = readJson(passFile(stateDir, session));
-  if (!held) return false;
+  if (!held) return null;
   try {
     rmSync(passFile(stateDir, session));
   } catch {
   }
-  return Number.isFinite(held.at) && now - held.at < PASS_WINDOW_MS;
+  return Number.isFinite(held.at) && now - held.at < PASS_WINDOW_MS ? held : null;
+}
+var takePass = (stateDir, session, now = Date.now()) => takeHold(stateDir, session, now) !== null;
+var switchFile = (stateDir, session) => join3(stateDir, "held", `${safeName(session)}.switch.json`);
+function recordSwitch(stateDir, session, expect, at = Date.now()) {
+  writeJson(switchFile(stateDir, session), { at, expect });
+}
+function verifySwitch(stateDir, session, transcriptPath) {
+  const sw = readJson(switchFile(stateDir, session));
+  if (!sw?.expect || !transcriptPath) return null;
+  const reply = claudeLastReply(transcriptPath);
+  if (!reply.at || !(Date.parse(reply.at) >= sw.at)) return null;
+  try {
+    rmSync(switchFile(stateDir, session));
+  } catch {
+  }
+  const served = { model: reply.model, effort: reply.effort }, expected = sw.expect;
+  const ok = (!expected.model || sameKey(served.model, expected.model)) && (!expected.effort || served.effort === expected.effort);
+  logDecision(stateDir, { event: "switch-verified", app: "claude", session, expected, served, ok });
+  return { ok, expected, served };
 }
 var settingsFile = (stateDir) => join3(stateDir, "settings.json");
 var badgeEnabled = (stateDir) => readJson(settingsFile(stateDir))?.badge !== false;
 function setBadge(stateDir, enabled) {
   writeJson(settingsFile(stateDir), { ...readJson(settingsFile(stateDir)) ?? {}, badge: enabled });
 }
-function showBadge(stateDir, appKind, level, badge) {
-  if (process.platform !== "win32" || !badgeEnabled(stateDir)) return false;
+var badgeFile = (stateDir) => join3(stateDir, "badge.json");
+function showBadge(stateDir, appKind, fig) {
+  if (process.platform !== "win32" || !badgeEnabled(stateDir)) return null;
   let script;
   try {
     script = join3(dirname(fileURLToPath(import.meta.url)), "jev-badge.ps1");
   } catch {
-    return false;
+    return null;
   }
-  if (!existsSync3(script)) return false;
-  const spec = join3(stateDir, "badge.json");
+  if (!existsSync3(script)) return null;
+  const spec = badgeFile(stateDir), id = randomUUID();
   try {
-    writeJson(spec, { id: randomUUID(), app: appKind, level, title: badge.title, body: badge.body, seconds: level === "stop" ? 45 : 15 });
+    writeJson(spec, {
+      id,
+      app: appKind,
+      level: fig.level,
+      mode: fig.wait ? "wait" : "note",
+      title: fig.title,
+      body: fig.body,
+      how: fig.how ?? "",
+      seconds: fig.seconds ?? (fig.level === "stop" ? 45 : 15),
+      hookPid: fig.wait ? process.pid : 0,
+      state: "open"
+    });
   } catch {
-    return false;
+    return null;
   }
   try {
     spawn(
@@ -22130,22 +22169,64 @@ function showBadge(stateDir, appKind, level, badge) {
       ["/d", "/s", "/c", "start", '""', "/b", "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script, "-Spec", spec],
       { detached: true, stdio: "ignore", windowsHide: true }
     ).unref();
-    return true;
+    return id;
   } catch {
-    return false;
+    return null;
   }
 }
+function updateBadge(stateDir, id, patch) {
+  const spec = readJson(badgeFile(stateDir));
+  if (spec?.id === id) {
+    try {
+      writeJson(badgeFile(stateDir), { ...spec, ...patch });
+    } catch {
+    }
+  }
+}
+var sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+var figureAlive = (stateDir, id, now = Date.now()) => {
+  const ack = readJson(join3(stateDir, "badge-ack.json"));
+  return ack?.id === id && Number.isFinite(ack.at) && now - ack.at < 4e3;
+};
+async function figureShown(stateDir, id, timeoutMs = 6e3) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    if (figureAlive(stateDir, id)) return true;
+    await sleep(100);
+  }
+  return false;
+}
+var WAIT_MS = 9e4;
+var HOOK_BUDGET_MS = 135e3;
+var SETTLE_MS = 500;
+var HOOK_START = Date.now();
+async function waitForSwitch(o) {
+  let seen = `${o.from.model}|${o.from.effort}`;
+  while (Date.now() < o.deadline) {
+    await sleep(o.pollMs ?? 250);
+    if (o.sent()) return { kind: "as-is" };
+    if (!o.shown()) return { kind: "gone" };
+    const now = o.menu();
+    if (!now || `${now.model}|${now.effort}` === seen) continue;
+    seen = `${now.model}|${now.effort}`;
+    if (o.fits(now)) return { kind: "switched", setting: now };
+  }
+  return { kind: "timeout" };
+}
+var withSetting = (app, s) => ({ ...app, current: () => s });
 async function checkMessage(event, appKind, app, session, prompt, stateDir, opts) {
-  const emit = (line) => {
+  const emit = (line2, context) => {
     const out = {};
-    const text2 = [opts.lead, line].filter(Boolean).join(line?.includes("\n") ? "\n" : " ");
+    const text2 = [opts.lead, line2].filter(Boolean).join(line2?.includes("\n") ? "\n" : " ");
     if (text2) out.systemMessage = text2;
-    if (opts.command) out.hookSpecificOutput = { hookEventName: "UserPromptSubmit", additionalContext: `Hinweis: Das vorangestellte \u201E${opts.command}\u201C ist ein Befehl an das Jev-Plugin und geh\xF6rt nicht zur Nachricht.` };
+    const notes = [opts.command ? `Hinweis: Das vorangestellte \u201E${opts.command}\u201C ist ein Befehl an das Jev-Plugin und geh\xF6rt nicht zur Nachricht.` : "", context ?? ""].filter(Boolean);
+    if (notes.length) out.hookSpecificOutput = { hookEventName: "UserPromptSubmit", additionalContext: notes.join("\n") };
     if (Object.keys(out).length) process.stdout.write(JSON.stringify(out) + "\n");
   };
-  if (takePass(stateDir, session)) {
+  const held = takeHold(stateDir, session);
+  if (held) {
     logDecision(stateDir, { event: "passed-after-hold", app: appKind, session, current: app.current() });
-    return emit("Jev: Die angehaltene Nachricht geht jetzt durch.");
+    return emit("Jev: geht jetzt durch.", held.line ? `Hinweis vom Jev-Plugin: Es hatte die vorige Nachricht angehalten (\u201E${held.line}\u201C).${held.how ? ` Umstellen: ${held.how}` : ""} Fragt der Nutzer, wie das geht, antworte in einem Satz; sonst ignoriere diesen Hinweis.` : void 0);
   }
   let r;
   try {
@@ -22161,7 +22242,7 @@ async function checkMessage(event, appKind, app, session, prompt, stateDir, opts
     logDecision(stateDir, { event: "no-new-task", app: appKind, session, newTask: r.newTask.yes });
     return emit(null);
   }
-  const rec = recommend(r, app), a = assess(r, app, rec), card = jevCard(a, app);
+  const rec = recommend(r, app), a = assess(r, app, rec), card = jevCard(a, app), fig = card.badge, line = card.text.split("\n")[0];
   logDecision(stateDir, {
     event: "checked",
     app: appKind,
@@ -22176,25 +22257,74 @@ async function checkMessage(event, appKind, app, session, prompt, stateDir, opts
     taskKind: r.taskKind?.choice ?? null,
     difficulty: r.difficulty?.choice ?? null,
     reason: rec.policy && "reason" in rec.policy ? rec.policy.reason : null,
-    line: card.text.split("\n")[0]
+    line,
+    why: a.why || null
   });
-  if (card.badge && a.level !== "fits") showBadge(stateDir, appKind, a.level, card.badge);
-  if (a.level === "stop") {
-    markHeld(stateDir, session);
-    return block([opts.lead, card.text].filter(Boolean).join("\n"));
+  if (a.level === "fits" || !fig) return emit(card.text);
+  if (a.level === "note") {
+    showBadge(stateDir, appKind, { level: "note", title: fig.title, body: `${fig.steps} \xB7 die Nachricht l\xE4uft`, how: fig.how });
+    return emit(card.text);
   }
-  emit(card.text);
+  const menuFile = appKind === "claude" ? claudeMenuFile(session) : null;
+  const id = menuFile ? showBadge(stateDir, appKind, {
+    level: "stop",
+    wait: true,
+    title: fig.title,
+    body: `${fig.steps} \xB7 die Nachricht wartet, bis du umstellst`,
+    how: `${fig.how} Die Nachricht startet dann von selbst.`,
+    seconds: Math.ceil(WAIT_MS / 1e3) + 15
+  }) : showBadge(stateDir, appKind, { level: "stop", title: fig.title, body: `${fig.steps} \xB7 angehalten \u2013 umstellen, dann erneut senden`, how: fig.how });
+  if (menuFile && id && await figureShown(stateDir, id)) {
+    const started = Date.now();
+    let aliveAt = started;
+    const res = await waitForSwitch({
+      from: a.cur,
+      menu: () => readMenuFile(menuFile, session),
+      fits: (s) => {
+        const now = withSetting(app, s);
+        return assess(r, now, recommend(r, now)).level !== "stop";
+      },
+      sent: () => readJson(join3(stateDir, "badge-send.json"))?.id === id,
+      shown: () => {
+        if (figureAlive(stateDir, id)) aliveAt = Date.now();
+        return readJson(badgeFile(stateDir))?.id === id && Date.now() - aliveAt < 5e3;
+      },
+      deadline: Math.min(started + WAIT_MS, HOOK_START + HOOK_BUDGET_MS)
+    });
+    const waitedMs = Date.now() - started;
+    if (res.kind === "switched") {
+      const now = showSetting(app.display, res.setting);
+      updateBadge(stateDir, id, { state: "done", title: `\u2713 ${now}`, body: "Die Nachricht l\xE4uft." });
+      await sleep(SETTLE_MS);
+      recordSwitch(stateDir, session, res.setting);
+      logDecision(stateDir, { event: "switched-while-waiting", app: appKind, session, from: a.cur, to: res.setting, waitedMs });
+      return emit(`\u2713 Jev: jetzt ${now} \u2013 l\xE4uft.`);
+    }
+    if (res.kind === "as-is") {
+      updateBadge(stateDir, id, { state: "sent" });
+      logDecision(stateDir, { event: "sent-as-is", app: appKind, session, current: a.cur, waitedMs });
+      return emit(`Jev: l\xE4uft wie eingestellt (${showSetting(app.display, a.cur)}).`);
+    }
+    logDecision(stateDir, { event: res.kind === "gone" ? "wait-figure-gone" : "wait-timeout", app: appKind, session, waitedMs });
+  }
+  if (menuFile && id) updateBadge(stateDir, id, { state: "held", title: "Angehalten", body: "Umstellen und erneut senden." });
+  markHeld(stateDir, session, Date.now(), { line, how: fig.how });
+  block([opts.lead, card.text].filter(Boolean).join("\n"));
 }
 function statusText(appKind, session, stateDir, app) {
-  const on = guardEnabled(stateDir, session), last = lastDecision(stateDir, session);
-  const source = appKind === "codex" ? "laut Verlauf" : claudeMenu(session) ? "laut Men\xFC der App" : "laut letzter Antwort";
+  const on = guardEnabled(stateDir, session), last = lastEvent(stateDir, session), sw = lastEvent(stateDir, session, ["switch-verified"]);
+  const menu = appKind === "claude" && claudeMenu(session) !== null;
+  const source = appKind === "codex" ? "laut Verlauf" : menu ? "laut Men\xFC der App" : "laut letzter Antwort";
+  const hold = menu && badgeEnabled(stateDir) ? `ab ${STOP_STEPS} Stufen daneben wartet die Nachricht, bis du umstellst` : `ab ${STOP_STEPS} Stufen daneben wird einmal angehalten`;
   return [
     "Jev-Status f\xFCr diesen Chat",
-    `  Jev:          ${on ? `AN \u2013 pr\xFCft jede Nachricht selbst; ab ${STOP_STEPS} Stufen daneben wird einmal angehalten` : "AUS (einschalten: #jev an)"}`,
+    `  Jev:          ${on ? `AN \u2013 pr\xFCft jede Nachricht selbst; ${hold}` : "AUS (einschalten: #jev an)"}`,
     `  Eingestellt:  ${showSetting(app.display, app.current())} (${source})`,
     last ? `  Zuletzt:      ${last.event === "no-new-task" ? "keine neue Aufgabe \u2013 nichts zu tun" : last.event === "failed" ? `keine Einsch\xE4tzung (${last.reason})` : last.line}` : null,
+    last?.why ? `  Grund:        ${last.why}` : null,
+    sw ? `  Umstellung beim Warten: ${sw.ok ? "hat gewirkt" : "hat NICHT gewirkt"} \u2013 die Antwort lief auf ${showSetting(app.display, sw.served ?? {})}` : null,
     `  Jev-Figur:    ${badgeEnabled(stateDir) ? "an" : "aus"}${process.platform === "win32" ? "" : " (nur unter Windows)"}`,
-    `  Umstellen geht nur im Men\xFC: ${app.name} l\xE4sst Modell und Effort nicht von Plugins \xE4ndern.`
+    `  Umstellen geht nur im Men\xFC: ${app.name} l\xE4sst Modell und ${appKind === "codex" ? "Denkaufwand" : "Effort"} nicht von Plugins \xE4ndern.`
   ].filter(Boolean).join("\n");
 }
 async function handle(event, appKind, stateDir = stateDirectory()) {
@@ -22202,6 +22332,12 @@ async function handle(event, appKind, stateDir = stateDirectory()) {
   if (SESSION_ID.test(session)) {
     try {
       writeFocus(stateDir, { kind: appKind, id: session, at: Date.now(), cwd: event.cwd ?? null });
+    } catch {
+    }
+  }
+  if (appKind === "claude" && SESSION_ID.test(session)) {
+    try {
+      verifySwitch(stateDir, session, String(event.transcript_path ?? ""));
     } catch {
     }
   }
@@ -22217,13 +22353,19 @@ async function handle(event, appKind, stateDir = stateDirectory()) {
         setBadge(stateDir, command.action === "an");
         return block(`Jev-Figur ist ${command.action === "an" ? "AN \u2013 sie erscheint unten rechts am Fenster, wenn Modell oder Effort nicht passen" : "AUS \u2013 Jev meldet sich nur noch im Chat"}.`);
       }
-      const shown = showBadge(stateDir, appKind, "note", { title: `${appKind === "codex" ? "Denkaufwand" : "Effort"} \u2192 Mittel`, body: "So sieht die Jev-Figur aus \xB7 ein Klick schlie\xDFt sie" });
+      const word = appKind === "codex" ? "Denkaufwand" : "Effort";
+      const shown = showBadge(stateDir, appKind, {
+        level: "note",
+        title: `${word} \u2192 Mittel`,
+        body: "So sieht die Jev-Figur aus \xB7 ein Klick schlie\xDFt sie",
+        how: `${appKind === "codex" ? "Im Modellmen\xFC" : "Unten rechts im Eingabefeld das Men\xFC \xF6ffnen und"} ${word} \u201EMittel\u201C w\xE4hlen.`
+      });
       return block(shown ? "Jev-Figur: Test l\xE4uft \u2013 sie erscheint gleich unten rechts am Fenster und verschwindet nach 15 Sekunden." : "Jev-Figur ist aus (#jev figur an) oder hier nicht verf\xFCgbar (nur Windows).");
     }
     if (command.kind === "guard") {
       if (!SESSION_ID.test(session)) return command.rest ? void 0 : block("Jev: Dieser Chat hat keine erkennbare ID \u2013 nicht aktiviert.");
       setGuard(stateDir, session, command.enabled);
-      if (!command.rest) return block(command.enabled ? GUARD_ON(app.name) : `Jev ist f\xFCr diesen Chat AUS. Nachrichten gehen wieder unver\xE4ndert an ${app.name}.`);
+      if (!command.rest) return block(command.enabled ? GUARD_ON(app) : `Jev ist f\xFCr diesen Chat AUS. Nachrichten gehen wieder unver\xE4ndert an ${app.name}.`);
       if (!command.enabled) {
         process.stdout.write(JSON.stringify({ systemMessage: "Jev ist f\xFCr diesen Chat jetzt AUS.", hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: `Hinweis: Das vorangestellte \u201E${commandWord(command.rest)}\u201C ist ein Befehl an das Jev-Plugin und geh\xF6rt nicht zur Nachricht.` } }) + "\n");
         return;
@@ -22268,17 +22410,21 @@ export {
   NEW_TASK_MIN,
   PASS_WINDOW_MS,
   STOP_STEPS,
+  WAIT_MS,
   assess,
   badgeEnabled,
   checkMessage,
   claudeDesktopSessions,
+  claudeLastReply,
   claudeMenu,
+  claudeMenuFile,
   claudeProfile,
   claudeSetting,
   codexProfile,
   currentModel,
   effectiveModel,
   effortFor,
+  figureShown,
   focusFile,
   formatResult,
   guardEnabled,
@@ -22288,13 +22434,19 @@ export {
   markHeld,
   parseJevCommand,
   readFocus,
+  readMenuFile,
   recommend,
   recommendationLine,
+  recordSwitch,
   sameKey,
   sameModel,
   setBadge,
   setGuard,
   showBadge,
+  takeHold,
   takePass,
+  updateBadge,
+  verifySwitch,
+  waitForSwitch,
   writeFocus
 };
