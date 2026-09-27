@@ -21172,9 +21172,10 @@ function spectrumEffort(model, kind) {
   const general = cells.general;
   return general && general.evidence !== "weak" ? { ...general, scope: "general" } : null;
 }
+var PRICE_TO_TASK = MODEL_FACTS["claude-opus-5-5"].costPerTask / MODEL_FACTS["claude-opus-5-5"].price.output;
 function cost(key) {
   const f = MODEL_FACTS[key];
-  return f?.price?.output ?? f?.costPerTask ?? null;
+  return f?.costPerTask ?? (f?.price ? f.price.output * PRICE_TO_TASK : null);
 }
 function decideModel(input2) {
   const current = modelKey(input2.current);
