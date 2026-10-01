@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased — local Jev calibration update
+## 0.8.0 — 2026-10-01
+
+Finished preview; the project is complete as published.
+
+- Fixes: the Codex chat monitor pruned old sessions with the wall clock instead of the given time (date-dependent test failures); project names from Windows paths on Linux; Jev app menu groups and singular labels. Jev app: `--home` data folder.
+- README rewritten for first-time visitors (what is inside, quick start, how Jev chooses, tested limits, screenshot).
 
 - Jev app (preview, `src/jev-app/`): one local chat window for Claude Code and Codex. Jev picks agent, model and effort per message across both families and starts the official programs with that setting (user's own sign-ins); a switch hands over the whole unseen history; approvals in the window; sidebar with projects, conversations and existing Claude/Codex chats (continue as a Jev conversation). Model policy: cost per task in one unit for both families (price scaled by Opus 5.5's measured cost per task); comparing $/M tokens with $/task had made Codex models look ~75 % cheaper. Live: Jev app → Codex GPT-6-Astra answered via the ChatGPT subscription; Claude side tested with a stand-in CLI only (not signed in).
 - Jev 0.8.0: short lines (user rule): `✓ Jev: Opus 5.5 · Mittel passt.`, `⚙ Jev: Effort 1 Stufe zu hoch: Hoch → Mittel · Opus 5.5 ✓`, a hold reads `⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5.5 ✓` plus one line on what to do; scale, task label and model reason left the chat (reason in the log and `#jev status`). Claude desktop app: a message two or more steps off now waits for the switch (up to 90 s) and runs by itself once the menu is set (the app saves the change to its session file and hands it to the running chat at once); the figure offers "Wie?" and "So senden", turns green when the message runs, and closes when the message is stopped. Without a switch, in Codex, or with the figure off, the message is held once as before. After a hold, a "wie?" gets a one-sentence answer. Each switch during a wait is checked on the next message against what the reply really ran on (`switch-verified`). Live-tested with the real Jev service and figure: 0.58 s from switch to start, 0.17 s after "So senden".

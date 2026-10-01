@@ -78,7 +78,7 @@ function renderMsg(m){const w=el('div','msg '+m.role);
   if(m.role==='assistant'){const who=el('div','who');who.appendChild(el('span','tag '+(m.agent||'claude'),agentName(m.agent)));who.appendChild(el('span',null,[label(m.model),EFF[m.effort]||m.effort].filter(Boolean).join(' · ')));w.appendChild(who)}
   if(m.role==='user'){const who=el('div','who');who.style.justifyContent='flex-end';who.textContent='Du';w.appendChild(who)}
   w.appendChild(rich(m.text));
-  if(m.activity&&m.activity.length){const d=el('details','act');d.appendChild(el('summary',null,m.activity.length+' Schritte (Befehle, Dateien)'));const ul=el('ul');m.activity.forEach(a=>ul.appendChild(el('li',null,a)));d.appendChild(ul);w.appendChild(d)}
+  if(m.activity&&m.activity.length){const d=el('details','act');d.appendChild(el('summary',null,m.activity.length+(m.activity.length===1?' Schritt':' Schritte')+' (Befehle, Dateien)'));const ul=el('ul');m.activity.forEach(a=>ul.appendChild(el('li',null,a)));d.appendChild(ul);w.appendChild(d)}
   return w}
 function scroll(){const l=$('log');l.scrollTop=l.scrollHeight}
 async function refresh(force){S=await api('/api/state'+(force?'?refresh=1':''));
@@ -86,7 +86,7 @@ async function refresh(force){S=await api('/api/state'+(force?'?refresh=1':''));
   const list=$('list');list.textContent='';const groups={};for(const c of S.conversations)(groups[c.cwd]=groups[c.cwd]||[]).push(c);
   if(!S.conversations.length)list.appendChild(el('div','group','Noch keine Gespräche'));
   for(const [cwd,cs] of Object.entries(groups)){const g=el('div','group',base(cwd));g.title=cwd;list.appendChild(g);for(const c of cs){const it=el('div','item'+(cur&&cur.id===c.id?' active':''));it.appendChild(el('span','t',c.title));it.appendChild(el('small',null,(c.busy?'arbeitet … · ':'')+(c.last?agentName(c.last.agent)+' · '+label(c.last.model):'neu')));it.onclick=()=>open(c.id);list.appendChild(it)}}
-  const sel=$('model'),v=sel.value;sel.length=1;for(const a of ['claude','codex']){const og=document.createElement('optgroup');og.label=agentName(a);for(const m of S.models.filter(m=>m.agent===a))og.appendChild(Object.assign(document.createElement('option'),{value:m.id,textContent:m.label}));if(og.children.length)sel.appendChild(og)}sel.value=v;effortOptions()}
+  const sel=$('model'),v=sel.value;while(sel.children.length>1)sel.lastChild.remove();for(const a of ['claude','codex']){const og=document.createElement('optgroup');og.label=agentName(a);for(const m of S.models.filter(m=>m.agent===a))og.appendChild(Object.assign(document.createElement('option'),{value:m.id,textContent:m.label}));if(og.children.length)sel.appendChild(og)}sel.value=v;effortOptions()}
 function effortOptions(){const m=S.models.find(x=>x.id===$('model').value),e=$('effort');e.textContent='';e.hidden=!m||!m.efforts.length;if(m)for(const x of m.efforts)e.appendChild(Object.assign(document.createElement('option'),{value:x,textContent:EFF[x]||x}));if(m&&m.efforts.includes('medium'))e.value='medium'}
 $('model').onchange=effortOptions;
 async function open(id){cur=await api('/api/conversation?id='+id);$('title').textContent=cur.title;$('path').textContent=cur.cwd;$('access').value=cur.access;const log=$('log');log.textContent='';for(const m of cur.messages)log.appendChild(renderMsg(m));busy(cur.busy);scroll();refresh()}

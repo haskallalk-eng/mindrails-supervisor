@@ -229,9 +229,9 @@ function openWindow(url: string) {
 
 async function main() {
   const argv = process.argv.slice(2);
-  if (argv.includes('--help')) { console.log('Jev-App – ein Chat für Claude Code und Codex; Jev wählt Modell und Effort.\njev-app [--cwd ORDNER] [--port 47831] [--no-open]'); return; }
+  if (argv.includes('--help')) { console.log('Jev-App – ein Chat für Claude Code und Codex; Jev wählt Modell und Effort.\njev-app [--cwd ORDNER] [--port 47831] [--home DATENORDNER] [--no-open]'); return; }
   const at = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
-  const { url } = await startApp({ stateDir: stateDirectory(), port: Number(at('--port') ?? 47831), defaultCwd: at('--cwd') ?? process.cwd() });
+  const { url } = await startApp({ stateDir: at('--home') ?? stateDirectory(), port: Number(at('--port') ?? 47831), defaultCwd: at('--cwd') ?? process.cwd() });
   console.log(`Jev-App läuft: ${url}\nBeenden mit Strg+C.`);
   if (!argv.includes('--no-open')) openWindow(url);
 }

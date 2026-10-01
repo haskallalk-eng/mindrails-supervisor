@@ -1,7 +1,7 @@
 {
   "name": "mindrails-supervisor",
-  "version": "0.2.0",
-  "description": "Local MCP completion gates and loop detection for AI agents, with optional Jev evaluation. By Mindrails.",
+  "version": "0.8.0",
+  "description": "Pick the right AI model and effort before an agent starts: Jev plugins for Claude Code and Codex, a local chat app for both, and an MCP completion gate. By Mindrails.",
   "scripts": {
     "build": "tsc && npm run build:codex-plugin && npm run build:jev-plugins",
     "build:codex-plugin": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node24 --outfile=plugins/jev-chat-review/server.mjs && esbuild plugins/jev-chat-review/hooks/review-stop.ts --bundle --platform=node --format=esm --target=node24 --outfile=plugins/jev-chat-review/hooks/review-stop.mjs",
@@ -36,7 +36,8 @@
     "mindrails-supervisor": "dist/cli.js",
     "jev": "dist/jev.js",
     "jev-panel": "dist/jev-panel.js",
-    "jev-hook": "dist/jev-hook.js"
+    "jev-hook": "dist/jev-hook.js",
+    "jev-app": "dist/jev-app/app.js"
   },
   "files": [
     ".agents",

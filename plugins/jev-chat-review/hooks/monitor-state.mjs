@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 
 const FILE = 'jev-chat-monitor-state.json';
 const LOCK_WAIT_MS = 1_000;
@@ -11,7 +11,7 @@ const LONG_TURN_MS = 10 * 60 * 1000;
 const hash = (value) => createHash('sha256').update(value).digest('hex').slice(0, 16);
 const nowIso = () => new Date().toISOString();
 
-async function withLock(dataDir, operation) {
+async function withLock(dataDir, operation, now = Date.now()) {
   if (!dataDir) throw new Error('PLUGIN_DATA_MISSING');
   await mkdir(dataDir, { recursive: true });
   const lockPath = join(dataDir, 'jev-chat-monitor.lock');
@@ -38,7 +38,7 @@ async function withLock(dataDir, operation) {
       else throw new Error('MONITOR_STATE_INVALID');
     }
     const result = await operation(state);
-    state.sessions = state.sessions.filter((s) => Date.now() - Date.parse(s.updatedAt) <= RETAIN_MS).slice(-MAX_SESSIONS);
+    state.sessions = state.sessions.filter((s) => now - Date.parse(s.updatedAt) <= RETAIN_MS).slice(-MAX_SESSIONS);
     const temp = join(dataDir, `jev-chat-monitor-${randomUUID()}.tmp`);
     await writeFile(temp, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
     await rename(temp, path);
@@ -105,7 +105,8 @@ export async function recordMonitorEvent(dataDir, event = {}, now = Date.now()) 
     let session = state.sessions.find((candidate) => candidate.id === id);
     const stamp = new Date(now).toISOString();
     if (!session) {
-      session = { id, project: basename(String(event.cwd ?? '').replace(/[\\/]+$/, '')) || 'Codex', model: '', startedAt: stamp, updatedAt: stamp, status: 'idle', turnStartedAt: null, lastTurnMs: null, toolCount: 0, loopCount: 0, actions: [] };
+      // Last folder name for Windows and POSIX paths alike (path.basename only knows the host's separator).
+      session = { id, project: String(event.cwd ?? '').split(/[\\/]+/).filter(Boolean).pop() || 'Codex', model: '', startedAt: stamp, updatedAt: stamp, status: 'idle', turnStartedAt: null, lastTurnMs: null, toolCount: 0, loopCount: 0, actions: [] };
       state.sessions.push(session);
     }
     session.updatedAt = stamp;
@@ -136,7 +137,7 @@ export async function recordMonitorEvent(dataDir, event = {}, now = Date.now()) 
     }
     if (eventName === 'sessionend') { session.status = 'ended'; session.turnStartedAt = null; }
     return { skipped: false, status: session.status, recommendations: recommendations(session, now).map((item) => item.text) };
-  });
+  }, now);
 }
 
 export async function readMonitorView(dataDir, now = Date.now()) {
