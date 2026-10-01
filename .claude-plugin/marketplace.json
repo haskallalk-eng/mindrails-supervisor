@@ -1,0 +1,14 @@
+{
+  "name": "mindrails",
+  "owner": {
+    "name": "Mindrails",
+    "url": "https://mindrails.de"
+  },
+  "plugins": [
+    {
+      "name": "jev",
+      "source": "./plugins/jev-claude",
+      "description": "Checks each new task against benchmarks: check mark, one line plus an on-screen figure, or – two or more steps off – the message waits until you switch, then runs by itself."
+    }
+  ]
+}

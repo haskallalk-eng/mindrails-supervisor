@@ -1,0 +1,141 @@
+# Jev model routing before submission
+
+Run `jev` in your project for a local interactive conversation, or `jev "Your task"` for one task. Installed using `npm link` after `npm run build`. Node 24 and an authenticated Codex CLI are required. On Windows, `scripts/Start-Jev.ps1` refreshes the existing user-scoped gateway key and starts a conversation with workspace edits enabled. No OpenAI API key is required: execution uses the existing Codex login and its usage limits. Jev inference uses `AI_GATEWAY_API_KEY` and may incur Vercel/TypeSafe charges.
+
+1. Read the account's current visible model catalog via the Codex app server. Candidates are available GPT-6 Astra, Sol and Luna, with catalog descriptions and their default reasoning efforts.
+2. Send the upcoming task and, for a resumed conversation, visible stored history to Jev. Internal reasoning is excluded; common credentials are redacted. Repository files are not automatically loaded into the routing context.
+3. Validate the full probability distribution and choose its exact maximum. Low confidence does not override the maximum. Exact ties retain the baseline if tied, otherwise prefer Astra, then Sol, then Luna.
+4. Start Codex once with an explicit `--model` and a supported default reasoning effort. The original task goes over stdin, unchanged. Jev's answer is never executed as code.
+5. Print the assistant's answer and keep the session ID for the next input. Each new input is independently routed using the saved visible history. `/exit` ends the local interface. `jev --resume UUID` continues a saved conversation.
+
+The baseline is the conversation's current model (for a new conversation: the catalog default). Missing keys, timeout, HTTP error, invalid output or a request above 64 KB preserve this baseline with a visible reason and no invented probabilities. Catalog/read failures stop before dispatch. There are no automatic retries after dispatch failures. Requests to Jev time out after eight seconds; model catalog lookup after twenty seconds.
+
+**Long conversations.** History is read page by page (`thread/turns/list`: every turn as user message + final answer, the last three turns in full). If it fits into 24 KB it is sent completely and labeled `visibleHistory: "complete"`. Otherwise Jev receives a deterministic, labeled selection (`visibleHistory: "selection"` with a disclosure sentence): the last three turns in detail (failed commands, changed files, clipped long texts), sentences from older turns that look like constraints, decisions or open problems (keyword heuristic, may miss or over-include), short digests of older turns newest first, and the first request. The panel and CLI show exactly how much was included. No model summarizes the history; nothing claims the full history was sent. Measured on the real 41-turn conversation `01a0ce29…` (4.7 MB rollout, 53 KB visible summary): 23 KB selection, about 8,000 Jev input tokens per routed message.
+
+`jev` defaults to read-only execution. `jev --workspace-write` permits project edits. Both use Codex's sandbox and never grant additional approvals automatically; actions requiring approval fail in this noninteractive execution path. Existing user/project configuration still applies. `--ephemeral` runs an isolated one-off conversation without storing its session. Text input only; attachments and native approval dialogs are not implemented. The Stop review is disabled for these routed executions to avoid a second paid Jev review.
+
+**This is a separate local input path. It does not intercept the native Codex desktop composer, add a chat icon, or change models in already running tasks.** The supported UserPromptSubmit hook exposes context/blocking output, but no model override. Native composer integration remains unfinished. The model probabilities are Jev's relative suitability judgments, not measured task-success rates. End-to-end execution proves dispatch works; it does not establish routing quality on real development tasks.
+
+References: [Codex hooks](https://learn.chatgpt.com/docs/hooks), [model catalog and model selection at turn start](https://learn.chatgpt.com/docs/app-server).
+
+## Side panel (`jev-panel`)
+
+```powershell
+jev-panel --thread <UUID> --cwd <project>            # continue a conversation
+jev-panel --cwd <project> --workspace-write          # start new conversations with project edits
+```
+
+`scripts/Start-JevPanel.ps1 -Thread <UUID>` does the same and refreshes the user-scoped gateway key. The command prints `http://127.0.0.1:47821/?t=…`; open that address in Codex's in-app browser next to the chat (or any browser). The page is served on loopback only, needs the per-user token (stored in `%LOCALAPPDATA%\mindrails-jev\panel-token`), rejects foreign `Host` headers and cross-site form posts.
+
+Each message: take a cross-process panel lock → start a short-lived `codex app-server` → `thread/resume` (this acquires Codex's own single-writer lock) → read history and build the context → ask Jev → `turn/start` on the same conversation with an explicit `model` and `effort` → stream the answer, commands, file changes and approval requests into the panel → close the app-server so the writer is released. Resumed conversations keep their own sandbox and approval settings; `--workspace-write` only applies to conversations the panel creates. Approval requests appear as buttons; nothing is approved automatically, and unanswered requests are declined after ten minutes. A second message while one runs is rejected (button disabled, HTTP 409, message-ID de-duplication, lock file). Note that Codex treats the `model` of a turn as the conversation's model for following turns, including ones typed later in the Codex app.
+
+### Verified limits (Codex 0.155, desktop 26.917)
+
+- **Conversations open in the Codex app cannot be written by any other process.** Codex enforces one writer per conversation (`thread … already has an active writer`); the desktop app holds it for loaded chats, even when a separate app-server reports `notLoaded`. The panel then refuses to send, keeps your text, and offers an explicit *Abzweig* (`thread/fork`: new conversation with a copy of the history; the original is not changed). The desktop's own app-server is not reachable from outside (no daemon socket), and its internal app-tools pipe is reserved for the app's own approved tool calls, so the panel does not use it.
+- The native composer cannot be intercepted: hook output supports context/blocking (`additionalContext`, `decision`, `systemMessage`), no model override.
+- The panel is not embedded in the Codex window automatically; you open its address in the in-app browser. Whether the Codex app live-refreshes a conversation that the panel wrote while the app had it unloaded was not verified (no screen access was granted); reopening the conversation shows the turns stored in its history.
+- Text input only; no attachments, images, skills or mentions.
+
+### Asking Jev about a chat (tab *Fragen*)
+
+Pick a Claude Code session (read from `~/.claude/projects/*/<id>.jsonl`) or a Codex conversation, optionally type a yes/no question, and press *Jev fragen*. The chat is converted to visible turns (no thinking blocks, side chains or meta messages; common secrets redacted), reduced with the same labeled selection as routing, and sent to Jev in one request. Jev's API answers structured questions only, so the panel shows: progress (advancing / stalled / complete / uncertain), dominant obstacle, suggested next step, each with its top probabilities, and for your question the probability of "yes". Jev does not write prose answers, cannot browse, and nothing is executed. Errors are shown with their reason; no values are invented and nothing is retried. Live check on this Claude session: "Kann Codex im Moment Aufgaben ausführen?" → 13 % yes; obstacle "environment/access" 93 % (the Codex usage limit), about 5,200 input tokens.
+
+### Assistant tab
+
+The default *Assistent* tab targets the **most recently updated** Claude Code session or Codex conversation (the panel cannot see which window you are looking at; you can pick another chat). *Analysieren* returns progress, obstacle and next step in one line. Type the next task and press *Modell vorschlagen*: Jev picks among Opus 5.5 / Sonnet 5 / Haiku 4.5 for Claude chats (Fable 5.1 is not offered because its intended use is not documented here) or the Codex catalog models, using the chat as context; nothing is executed and the switch is up to you (*Aufgabe kopieren* copies the task). Optional auto mode analyzes the current chat once it has been unchanged for 20 s after an update, at most every two minutes; each run is a paid Jev call. Keep one panel tab open: every tab holds a live connection and browsers allow only six per address.
+
+### Knowing which chat you are in: prompt hooks and `#jev`
+
+The panel cannot see which window is focused. Instead, prompt hooks record the chat you last typed in (`%LOCALAPPDATA%\mindrails-jev\focus.json`: kind, id, time, cwd — no prompt text), and the *Assistent* tab uses it (“hier hast du zuletzt geschrieben”), falling back to the most recently updated chat.
+
+- Claude Code: `~/.claude/settings.json` → `hooks.UserPromptSubmit` runs `node <repo>/dist/jev-hook.js` (exec form, 30 s timeout). Normal prompts pass unchanged (~0.25 s). `#jev` analyzes the current chat, `#jev <task>` also recommends Opus/Sonnet/Haiku for that task, `#jev? <question>` answers a yes/no question. These commands are blocked before reaching Claude (no Claude tokens) and Jev's answer is shown as the block reason. Each is one paid Jev call.
+- Codex: the `jev-chat-review` plugin adds `hooks/jev-focus.mjs` to `UserPromptSubmit` (async, id only). The installed plugin copy under `~/.codex/plugins/cache/local-jev-dev/…` must contain it; Codex loads hooks at start.
+
+Computer use is not used for this: it would need screen access every time, is slow, and the panel cannot invoke Claude anyway.
+
+### Guard mode (Claude Code and Codex)
+
+`#jev an` turns Jev on **for that chat only** (stored per session id, stays on until `#jev aus`). Every prompt except slash commands then goes to Jev.
+
+1. **Jev decides whether a look is needed.** The same Jev request carries a yes/no question, `new_task`: does this message start a new task, or clearly change the kind or difficulty of the work? Replies, confirmations, answers, small corrections and "continue" are not new tasks. Below 50 % (`NEW_TASK_MIN`) nothing happens and nothing is shown. There is no length rule in our code; Jev makes this call.
+2. **New task: distance in steps.** The benchmark policy below picks the model and the per-model effort. The effort is the level the weighted evidence names for that model; a hard task gets one level more, never into the range rated "too much" (`avoidFrom`). `assess()` counts how far the current setting is off:
+   - effort: levels on the model's own ladder (Claude low…max, Codex per model, e.g. including `ultra`);
+   - model: capability tiers between current and recommended (only when the policy recommends a switch; a switch within one tier counts as 1).
+3. **What the user sees** (user rule, `STOP_STEPS = 2`):
+
+   | Distance | Result |
+   |---|---|
+   | 0 | `✓ Jev: Opus 5.5 · Mittel passt.` |
+   | 1 | one line as `systemMessage`, e.g. `⚙ Jev: Effort 1 Stufe zu hoch: Hoch → Mittel · Opus 5.5 ✓` (Codex: `Denkaufwand`), plus the Jev figure; the message runs |
+   | ≥ 2 | Claude desktop app: the message **waits for the switch** (below). Codex, or without the figure on screen: held once (`decision: block`) with `⛔ Jev angehalten – Effort 3 Stufen zu hoch: Max → Mittel · Opus 5.5 ✓` and `Effort umstellen und erneut senden.` |
+
+   The lines are deliberately short (user rule). A model line reads `⚙ Jev: Modell 1 Stufe zu stark: Fable 5.1 → Opus 5.5 · Mittel`; the benchmark reason goes to the log and `#jev status`.
+4. **Waiting for the switch (Claude desktop app, `WAIT_MS` = 90 s).** The hook shows the red figure in wait mode and keeps the prompt submission open while it polls the chat's desktop session file every 250 ms.
+   - The desktop app saves a menu change to that file at once and hands it to the running Claude Code process (`applyFlagSettings({effortLevel})`, pushed even while a turn runs). Claude Code reads the effort from its app state for each request.
+   - As soon as the file shows a setting that is no longer two or more steps off, the hook waits 500 ms for that hand-over, turns the figure green (`✓ Opus 5.5 · Mittel`), prints `✓ Jev: jetzt Opus 5.5 · Mittel – läuft.` and lets the message through. A setting still two or more steps off keeps it waiting.
+   - "So senden" in the figure writes `badge-send.json`; the message runs as it is.
+   - Timeout, or the figure gone (it reports itself every second in `badge-ack.json`; replaced by a newer figure): the message is held as below.
+   - Live-tested with the real Jev service and figure against a copy of a session file: figure on screen after 2.6–3.5 s; after the switch the hook returned in 0.58 s, after "So senden" in 0.17 s.
+   - Whether each reply really ran on the new setting is checked on the chat's next message from the transcript (`switch-verified` in the log, shown by `#jev status`). For an effort change the evidence is the app code above. For a model change it rests on this check.
+   - `hooks.json` allows the hook 150 s in all.
+5. **Held messages pass on the next send.** After a hold, the next message in that chat within 15 minutes (`PASS_WINDOW_MS`) passes without a new Jev call, whether the user switched the setting or wants it as is. The desktop app's "edit prompt" puts the text back; Enter sends it. If the user asks "wie?" instead, `additionalContext` carries the hold and where to switch, so the model can answer in one sentence.
+6. **Current setting.** For the Claude desktop app, the model and effort come from the app's own chat file: `%APPDATA%\Claude\claude-code-sessions\…\local_*.json`, matched by `cliSessionId` and read-only (about 25 ms). A menu change therefore counts at once. Without the desktop app, they come from the latest reply in the transcript (`message.model`, and `perTurnEffort` or else `effort`). For Codex they come from the rollout: the hook input has `model`, but no effort.
+7. **Jev figure (Windows).** `src/jev-badge.ps1`, copied next to the hook bundle, shows a small WPF window near the bottom right of the Claude window (process `claude`) or Codex window (process `ChatGPT`), where the model and effort menus are.
+   - It is topmost and does not show in the taskbar or Alt+Tab. `ShowActivated=false` plus `WS_EX_NOACTIVATE` keep it from taking the focus.
+   - It is DPI-aware per monitor.
+   - "Wie?" opens one sentence on where to switch; the figure grows upwards and keeps its corner.
+   - A note closes on click, or after 15 s (45 s for a Codex hold). In wait mode, clicks outside "Wie?" and "So senden" do nothing. The figure follows the hook's verdict: green and gone after 2.5 s (switched), gone (sent as is), red and gone after 6 s (held). It also closes when the waiting hook process is gone, e.g. after the message was stopped in the app (tested: 0.5 s).
+   - The hook writes the texts and the verdict to `badge.json` in the state directory. This avoids command-line quoting, and a newer figure replaces an older one. The figure answers through `badge-ack.json` and `badge-send.json`.
+   - It is started through `cmd /c start`. A Node child spawned `detached` ran PowerShell 5.1 for 90 ms without executing the script (tested).
+   - `#jev figur aus|an|test` switches it off, back on, or shows a sample. With the figure off, a message two or more steps off is held at once, because nothing would explain a wait.
+8. **Prefix commands.** `#jev an <text>`, `#jev aus <text>` and `#jev <text>` send the text; `additionalContext` tells the model to ignore the command prefix. Only bare commands are held, because they have nothing to send: `#jev an`, `#jev aus`, `#jev`, `#jev? <question>`, `#jev status`, `#jev figur …` and `#jev hilfe`.
+
+Every check is logged to `guard-log.jsonl` as `checked` (with level, steps and the reason), `no-new-task`, `switched-while-waiting`, `sent-as-is`, `wait-timeout`, `wait-figure-gone`, `switch-verified`, `passed-after-hold` or `failed`, without prompt text. `#jev status` shows the latest check, its reason and whether the last switch during a wait reached the reply.
+
+**Why Jev does not switch model or effort itself (tested live on 2026-09-27, Claude desktop app, Claude Code 2.1.281).**
+
+- UserPromptSubmit hook output has no model or effort field.
+- The desktop app's session tools refuse to change the calling session ("a session must not silently re-price its own turns").
+- Skill frontmatter `model`/`effort` does reach Claude Code's context as layers, but not the requests:
+  - After `effort: medium`, every following request of that message was still sent with `effort` and `perTurnEffort` = `max`, the menu value.
+  - After `model: claude-opus-5`, Claude Code switched its own system prompt to "Opus 5", yet every following reply was served by `claude-opus-5-5`, the menu model, with no server fallback recorded.
+
+The desktop app enforces its menu setting on every request, so plugin skills cannot change it. Version 0.5.0 relied on such skills; 0.6.0 removed them, because they added a round trip and a misleading model identity without effect. Codex hooks and skills have no model or effort override either. The only switch is the model menu in each app.
+
+### Tiers, threshold and evidence
+
+Jev chooses a capability tier, not a version: Spitze (Fable 5.1/5), Stark (Opus 5.5/5/4.8/4.7/4.6), Alltag (Sonnet 5/4.6), Schnell (Haiku 4.5). Any model id is mapped by family, including settings aliases such as `fable[1m]`; if the transcript has no assistant message yet, the model from `~/.claude/settings.json` is used. The guard never interrupts within a tier, never when the current model is unknown, and between tiers only when Jev's top tier has at least 50 % and leads the current tier by at least 25 points (`GUARD_MIN_TOP`, `GUARD_MIN_MARGIN` in `src/chat-inspect.ts`).
+
+Tier and effort criteria quote Anthropic's published measurements from the Claude API cost-optimization guidance (e.g. Opus 5 matched Fable 5 on a coding subset, 91.7 % vs 91.3 %, at about 60 % of the cost; Haiku 4.5 63 % vs Opus 5 92 % on knowledge questions at about a tenth of the cost; effort curves for research vs long-horizon coding). They were measured by Anthropic on Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5, not independently and not on Fable 5.1 / Opus 5.5; no independent per-model benchmark numbers are embedded. The cost line is exact arithmetic on list prices per token; cost per task can differ. Jev's probabilities remain relative judgments, not calibrated success rates.
+
+Every guard decision is appended to `%LOCALAPPDATA%\mindrails-jev\guard-log.jsonl` (time, session id, current model, recommended tier, probabilities, whether the user followed — never prompt text), so recommendations can later be checked against real outcomes.
+
+### Benchmark policy (replaces the tier threshold where data exists)
+
+Jev classifies each task into a kind (`coding`, `agentic`, `reasoning`, `research`, `simple`) and a difficulty (`easy`, `normal`, `hard`). `src/model-policy.ts` then decides deterministically from `src/model-benchmarks.ts` (FrontierCode v1.1 Main for coding, Terminal-Bench 4.0 for agentic work, the Artificial Analysis Intelligence Index for reasoning/research; each score with source URL, vendor/independent, as of 2026-09-26):
+
+- Candidates within a tolerance of the best score count as equally good (easy 10, normal 5, hard 2 points); the cheapest of them is recommended (Claude: list price per output token; Codex: measured cost per task).
+- The user is interrupted only for a quality gap of at least 4 points (user-set; published scores carry roughly ±2–5 points of noise and vendor-harness differences) or a saving of at least 25 % while the current model is not better beyond tolerance. Simple tasks use the cheapest model if that saves at least 25 %.
+- Where no comparable published score exists (Sonnet 5, Haiku 4.5, Opus 4.x on these benchmarks), the previous tier judgment by Jev is used and this is stated in the output.
+- Effort is Jev's choice clamped to the levels the recommended model offers in that app: Claude `low/medium/high/xhigh/max` (shown as Niedrig/Mittel/Hoch/Extra hoch/Max; none for Haiku 4.5), Codex per model from `~/.codex/models_cache.json` (e.g. `ultra` only for some GPT-6 models). In Codex the current effort is read from the conversation and shown next to the recommendation.
+
+### Packaging
+
+`plugins/jev-claude` (Claude Code plugin, marketplace `.claude-plugin/marketplace.json`) and `plugins/jev-codex` (Codex plugin, marketplace `.agents/plugins/marketplace.json`) contain the same self-contained hook bundle (`hooks/jev-guard.mjs`, built by `npm run build:jev-plugins`), so installing from GitHub needs no build step. Neither is an MCP server: MCP servers offer tools the model may call, whereas Jev must run before the model sees the prompt, which only a prompt hook can do.
+
+### Weighted practitioner/user spectrum (`src/model-spectrum.ts`)
+
+Benchmarks cover only some models and task types. A second evidence source is a weighted spectrum built from 668 collected statements ("model X is good/bad at task Y") and 171 effort statements from Hacker News, Reddit, X/YouTube, GitHub, developer blogs, tool vendors and non-English communities (`data/spectrum-claims/`, rebuilt with `npm run spectrum`; overview in [model-spectrum.md](model-spectrum.md)). Each statement is weighted by
+
+- credibility of the author (researcher/benchmark org 1.3, practitioner with structured tests or usage data 1.2, individual user 0.8, model vendor 0.8, press 0.6),
+- platform (paper/benchmark 1.2, GitHub 1.1, Hacker News and blogs 1.0, Reddit/X/forums 0.85, YouTube/news 0.8),
+- quality of the statement (measured/tested ×2, clear experience ×1, passing remark ×0.4),
+- recency (September 1.0 … June 0.7) and vendor self-interest (vendor praising its own model ×0.6, about competitors ×0.5).
+
+Repeats of the same point from the same thread/article count 30 % beyond the first; statements dated before a model's release are dropped (month-only dates count as the end of the month). Per model and task the score is 100·(positive − negative)/(total + 2), so thin evidence stays near 0; evidence is *strong* (weight ≥ 8 from ≥ 5 sources), *medium* (≥ 3 from ≥ 2) or *weak*. Effort verdicts (best / enough / too little / too much / worse than lower) vote for the level to use per model; task-specific effort votes count half toward the model's general level. Mislabelled effort verdicts found in a manual review are corrected and listed in `data/spectrum-claims/CORRECTIONS.md`.
+
+How the policy uses it:
+
+- **Veto**: a benchmark candidate rated clearly weak for the task (score ≤ −25 with strong or ≤ −40 with medium evidence) is not recommended; if the *current* model is vetoed, Jev recommends switching (`current-vetoed`).
+- **Fallback** where no comparable benchmark exists (e.g. Sonnet 5, Haiku 4.5): the best-rated model with at least medium evidence is recommended only if it leads the current model by ≥ 30 spectrum points.
+- **Effort per model**: the level the weighted verdicts point to for that model (task-specific only with strong evidence, else the model's general level with at least medium evidence), shown with "nicht … oder höher" when higher levels were reported as wasteful or worse; otherwise Jev's pick, always clamped to levels the app offers for that model. Effort is not assumed comparable across models or vendors.

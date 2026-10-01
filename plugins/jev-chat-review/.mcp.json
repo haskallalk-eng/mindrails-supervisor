@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mindrails-supervisor": {
+      "command": "node",
+      "args": ["server.mjs", "mcp"],
+      "cwd": ".",
+      "env": {
+        "MINDRAILS_PROVIDER": "jev",
+        "MINDRAILS_JEV_ROUTE": "vercel-ai-gateway"
+      },
+      "env_vars": ["AI_GATEWAY_API_KEY"]
+    }
+  }
+}

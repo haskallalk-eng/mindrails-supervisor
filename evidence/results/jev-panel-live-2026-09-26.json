@@ -1,0 +1,140 @@
+{
+  "timestamp": "2026-09-26T00:58:06.823Z",
+  "codex": "desktop-bundled CLI",
+  "steps": [
+    {
+      "step": "first message (new conversation)",
+      "ms": 13864,
+      "threadId": "01a0db38-38d3-7392-8fbf-a13c5204dfec",
+      "context": "Neues Gespräch – kein Verlauf.",
+      "decision": {
+        "model": "gpt-6-luna",
+        "source": "jev",
+        "reason": null,
+        "probabilities": {
+          "gpt-6-astra": 0.07,
+          "gpt-6-luna": 0.87,
+          "gpt-6-sol": 0.06
+        },
+        "baseline": "gpt-6-astra",
+        "effort": "medium",
+        "usage": {
+          "input_tokens": 542,
+          "output_tokens": 58
+        }
+      },
+      "answer": "",
+      "turn": "failed",
+      "blocked": null,
+      "errors": [
+        "Codex-Fehlermeldung: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Oct 1st, 2026 2:33 AM."
+      ]
+    },
+    {
+      "step": "follow-up, same conversation",
+      "ms": 6242,
+      "threadId": "01a0db38-38d3-7392-8fbf-a13c5204dfec",
+      "context": "Vollständiger sichtbarer Verlauf (1 Turns, 0.3 KB).",
+      "decision": {
+        "model": "gpt-6-luna",
+        "source": "jev",
+        "reason": null,
+        "probabilities": {
+          "gpt-6-luna": 0.75,
+          "gpt-6-astra": 0.09,
+          "gpt-6-sol": 0.16
+        },
+        "baseline": "gpt-6-luna",
+        "effort": "medium",
+        "usage": {
+          "input_tokens": 701,
+          "output_tokens": 58
+        }
+      },
+      "answer": "",
+      "turn": "failed",
+      "blocked": null,
+      "errors": [
+        "Codex-Fehlermeldung: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Oct 1st, 2026 2:33 AM."
+      ]
+    },
+    {
+      "step": "Jev outage (invalid key), same conversation",
+      "ms": 8512,
+      "threadId": "01a0db38-38d3-7392-8fbf-a13c5204dfec",
+      "context": "Vollständiger sichtbarer Verlauf (2 Turns, 0.7 KB).",
+      "decision": {
+        "model": "gpt-6-luna",
+        "source": "baseline",
+        "reason": "JEV_HTTP_401",
+        "probabilities": null,
+        "baseline": "gpt-6-luna",
+        "effort": "medium",
+        "usage": null
+      },
+      "answer": "",
+      "turn": "failed",
+      "blocked": null,
+      "errors": [
+        "Codex-Fehlermeldung: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Oct 1st, 2026 2:33 AM."
+      ]
+    },
+    {
+      "step": "conversation held by another Codex process",
+      "ms": 3832,
+      "threadId": "01a0db38-38d3-7392-8fbf-a13c5204dfec",
+      "context": null,
+      "decision": null,
+      "answer": "",
+      "turn": null,
+      "blocked": "CODEX_WRITER_ACTIVE",
+      "errors": []
+    }
+  ],
+  "conversation": {
+    "threadId": "01a0db38-38d3-7392-8fbf-a13c5204dfec",
+    "turns": [
+      {
+        "user": "Antworte ausschließlich mit PANEL_OK_1. Verwende keine Tools"
+      },
+      {
+        "user": "Folgefrage zum selben Gespräch: Welche Invariante garantiert"
+      },
+      {
+        "user": "Antworte ausschließlich mit PANEL_OK_3. Keine Tools."
+      }
+    ]
+  },
+  "longHistory": {
+    "threadId": "01a0ce29-3d35-7fd0-93f8-2805af54b4fe",
+    "readMs": 18435,
+    "stats": {
+      "totalTurns": 41,
+      "olderUnread": false,
+      "readTurns": 41,
+      "notes": 81,
+      "mode": "selection",
+      "recentTurns": 3,
+      "digestedTurns": 8,
+      "omittedTurns": 30,
+      "sourceBytes": 54360,
+      "sentBytes": 23408
+    },
+    "description": "Auswahl, nicht der vollständige Verlauf: 3 letzte Turns ausführlich, 8 ältere als Kurzfassung, 81 Einschränkungs-/Entscheidungs-/Problemsätze, 30 Turns nicht einzeln enthalten (22.9 KB aus 53 KB gelesenem Verlauf).",
+    "decision": {
+      "model": "gpt-6-astra",
+      "source": "jev",
+      "reason": null,
+      "probabilities": {
+        "gpt-6-luna": 0,
+        "gpt-6-astra": 0.55,
+        "gpt-6-sol": 0.45
+      },
+      "usage": {
+        "input_tokens": 7952,
+        "output_tokens": 58
+      }
+    },
+    "executed": false
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "jev",
+  "version": "0.8.0",
+  "description": "Jev checks each new task against benchmarks and weighted user evidence: a check mark when model and effort fit, one short line and a small on-screen Jev figure when one step off; two or more steps off, the message waits until you switch in the menu and then runs by itself. `#jev an` once per chat; `#jev hilfe` for commands.",
+  "author": {
+    "name": "Mindrails",
+    "url": "https://mindrails.de"
+  },
+  "homepage": "https://github.com/haskallalk-eng/mindrails-supervisor",
+  "license": "Apache-2.0"
+}

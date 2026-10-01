@@ -1,0 +1,101 @@
+{
+  "kind": "recorded-jev-policy-replay",
+  "sourceHash": "22aed8d59f0d66fa9576e2ff7e36b2add9001a11616a1e4385b57334818f47e8",
+  "recordedAt": "2026-09-24T18:30:00.378Z",
+  "policyVersion": "agent-trace-triage-v2",
+  "apiCalls": 0,
+  "rows": [
+    {
+      "id": "access-blocked",
+      "originalSemanticExpected": "fix_environment",
+      "previousAction": "fix_environment",
+      "action": "fix_environment",
+      "status": "supported",
+      "reason": "AGREEMENT",
+      "modelAction": "keep_current",
+      "modelDecisionBasis": "baseline_fallback",
+      "triage": "FILE_ISSUE"
+    },
+    {
+      "id": "missing-user-decision",
+      "originalSemanticExpected": "ask_question",
+      "previousAction": "ask_question",
+      "action": "ask_question",
+      "status": "supported",
+      "reason": "AGREEMENT",
+      "modelAction": "keep_current",
+      "modelDecisionBasis": "baseline_fallback",
+      "triage": "HUMAN_REVIEW"
+    },
+    {
+      "id": "failed-approach",
+      "originalSemanticExpected": "change_approach",
+      "previousAction": "change_approach",
+      "action": "change_approach",
+      "status": "supported",
+      "reason": "AGREEMENT",
+      "modelAction": "try_more_capable",
+      "modelDecisionBasis": "model",
+      "triage": "FILE_ISSUE"
+    },
+    {
+      "id": "unverified-success",
+      "originalSemanticExpected": "verify_result",
+      "previousAction": "review",
+      "action": "none",
+      "status": "uncertain",
+      "reason": "LOW_CONFIDENCE",
+      "modelAction": "keep_current",
+      "modelDecisionBasis": "prerequisite_override",
+      "triage": "PRIORITY_REVIEW"
+    },
+    {
+      "id": "missed-requirement",
+      "originalSemanticExpected": "realign",
+      "previousAction": "review",
+      "action": "none",
+      "status": "uncertain",
+      "reason": "LOW_CONFIDENCE",
+      "modelAction": "try_more_capable",
+      "modelDecisionBasis": "model",
+      "triage": "CONTINUE_BASELINE"
+    },
+    {
+      "id": "productive-repetition",
+      "originalSemanticExpected": "none",
+      "previousAction": "review",
+      "action": "none",
+      "status": "uncertain",
+      "reason": "LOW_CONFIDENCE",
+      "modelAction": "keep_current",
+      "modelDecisionBasis": "baseline_fallback",
+      "triage": "CONTINUE_BASELINE"
+    },
+    {
+      "id": "verified-complete",
+      "originalSemanticExpected": "none",
+      "previousAction": "review",
+      "action": "none",
+      "status": "uncertain",
+      "reason": "LOW_CONFIDENCE",
+      "modelAction": "keep_current",
+      "modelDecisionBasis": "baseline_fallback",
+      "triage": "CONTINUE_BASELINE"
+    },
+    {
+      "id": "insufficient-evidence",
+      "originalSemanticExpected": "review",
+      "previousAction": "review",
+      "action": "none",
+      "status": "uncertain",
+      "reason": "LOW_CONFIDENCE",
+      "modelAction": "keep_current",
+      "modelDecisionBasis": "baseline_fallback",
+      "triage": "HUMAN_REVIEW"
+    }
+  ],
+  "limitations": [
+    "Reuses the first eight synthetic development cases; this is policy regression evidence, not a fresh or held-out Jev evaluation.",
+    "Original expected semantic actions are preserved. A no-op fallback does not mean an unresolved case was solved."
+  ]
+}

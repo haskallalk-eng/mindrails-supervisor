@@ -12,7 +12,8 @@ async function run(name,expected,call){
 const requirement={id:'tested',description:'A test result is supplied'};
 try {
   await client.connect(transport);
-  await run('tool discovery',['check_completion','detect_stuck','triage_agent_run'],async()=>(await client.listTools()).tools.map(t=>t.name).sort());
+  await run('tool discovery',['check_completion','detect_stuck','open_codex_chats','triage_agent_run'],async()=>(await client.listTools()).tools.map(t=>t.name).sort());
+  await run('local chat overview has no provider cost',0,async()=>(await client.callTool({name:'open_codex_chats',arguments:{}})).structuredContent.apiCallsForMonitoring);
   await run('trace triage fixture','AUTO_CLOSE',async()=>(await client.callTool({name:'triage_agent_run',arguments:{task:'Prepare result',instructions:'Use given material',turns:[],toolCalls:[],finalMessage:'[mock:complete] Result ready.'}})).structuredContent.recommendation);
   await run('premature completion','continue',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'Done',requirements:[requirement],evidence:'Synthetic fixture'}})).structuredContent.decision);
   await run('fact-check missing evidence veto without provider call','continue',async()=>(await client.callTool({name:'check_completion',arguments:{task:'Ship tested code',currentResult:'[done:tested]',requirements:[requirement],evidenceMode:'fact-check'}})).structuredContent.decision);

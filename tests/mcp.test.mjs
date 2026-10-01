@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFileSync } from 'node:child_process';
-test('official MCP client initializes, lists and invokes both tools',async()=>{
+test('official MCP client initializes, lists and invokes all tools',async()=>{
   const transport=new StdioClientTransport({command:process.execPath,args:['dist/cli.js','mcp'],env:{MINDRAILS_PROVIDER:'mock'},stderr:'pipe'});
   let stderr=''; transport.stderr?.on('data',d=>stderr+=d);
   const client=new Client({name:'integration-test',version:'0.1.0'});
   try {
     await client.connect(transport);
-    const tools=await client.listTools(); assert.deepEqual(tools.tools.map(t=>t.name).sort(),['check_completion','detect_stuck','triage_agent_run']);
+    const tools=await client.listTools(); assert.deepEqual(tools.tools.map(t=>t.name).sort(),['check_completion','detect_stuck','open_codex_chats','triage_agent_run']);
+    const overview=await client.callTool({name:'open_codex_chats',arguments:{}});assert.equal(overview.structuredContent.apiCallsForMonitoring,0);
     const result=await client.callTool({name:'check_completion',arguments:{task:'Document release',currentResult:'[done:docs]',requirements:[{id:'docs',description:'Docs'}],evidence:'synthetic'}});
     assert.equal(result.structuredContent.decision,'finish'); assert.equal(result.structuredContent.provider,'mock');
     const stuck=await client.callTool({name:'detect_stuck',arguments:{steps:[]}});assert.equal(stuck.structuredContent.stuck,false);
@@ -30,7 +31,7 @@ test('CLI and MCP require explicit provider outside demo',()=>{
 });
 test('realistic MCP scenario runner passes',()=>{
   const out=execFileSync(process.execPath,['examples/mcp-e2e.mjs'],{encoding:'utf8'});
-  const report=JSON.parse(out);assert.equal(report.transport,'official-mcp-client-stdio');assert.equal(report.passed,11);assert.equal(report.failed,0);
+  const report=JSON.parse(out);assert.equal(report.transport,'official-mcp-client-stdio');assert.equal(report.passed,12);assert.equal(report.failed,0);
 });
 test('live Jev suite is dry-run by default with frozen bounded fixtures',()=>{
   const report=JSON.parse(execFileSync(process.execPath,['evidence/jev-live-suite.mjs'],{encoding:'utf8'}));

@@ -1,0 +1,83 @@
+{
+  "timestamp": "2026-09-24T21:57:44.567Z",
+  "mode": "live",
+  "models": [
+    "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna"
+  ],
+  "results": [
+    {
+      "task": "Antworte ausschließlich mit JEV_ROUTING_OK. Verwende keine Tools und ändere keine Dateien.",
+      "decision": {
+        "model": "gpt-6-luna",
+        "source": "jev",
+        "probabilities": {
+          "gpt-6-sol": 0.07,
+          "gpt-6-astra": 0.06,
+          "gpt-6-luna": 0.87
+        },
+        "usage": {
+          "input_tokens": 518,
+          "output_tokens": 58
+        }
+      },
+      "latencyMs": 1077
+    },
+    {
+      "task": "Implement a typical paginated REST endpoint with input validation and integration tests in an existing application.",
+      "decision": {
+        "model": "gpt-6-sol",
+        "source": "jev",
+        "probabilities": {
+          "gpt-6-luna": 0,
+          "gpt-6-astra": 0.03,
+          "gpt-6-sol": 0.97
+        },
+        "usage": {
+          "input_tokens": 514,
+          "output_tokens": 57
+        }
+      },
+      "latencyMs": 312
+    },
+    {
+      "task": "Diagnose a rare distributed consistency failure involving leader election, clock skew and concurrent writes. Derive the safety invariant and prove that the proposed protocol change preserves it.",
+      "decision": {
+        "model": "gpt-6-astra",
+        "source": "jev",
+        "probabilities": {
+          "gpt-6-luna": 0,
+          "gpt-6-astra": 1,
+          "gpt-6-sol": 0
+        },
+        "usage": {
+          "input_tokens": 528,
+          "output_tokens": 58
+        }
+      },
+      "latencyMs": 280
+    }
+  ],
+  "execution": {
+    "requestedModel": "gpt-6-luna",
+    "args": [
+      "-a",
+      "never",
+      "-s",
+      "read-only",
+      "exec",
+      "--model",
+      "gpt-6-luna",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
+      "--json",
+      "--ephemeral",
+      "-"
+    ],
+    "exitCode": 0,
+    "answer": "JEV_ROUTING_OK",
+    "passed": true
+  },
+  "limitations": "Synthetic smoke test. CLI receives the selected model explicitly; this does not measure model-selection quality or integrate the native composer."
+}

@@ -1,0 +1,1247 @@
+{
+  "kind": "synthetic-recovery-development-probe",
+  "recordedAt": "2026-09-24T18:06:26.592Z",
+  "fixtureHash": "526bc8c140dbe652cf32eed132b26de5b2af83c6fc847da7de8087458cc5a795",
+  "model": "typesafe-ai/jev",
+  "scheduled": 8,
+  "attempted": 8,
+  "correct": 4,
+  "automaticRetries": 0,
+  "inputTokens": 15435,
+  "outputTokens": 3266,
+  "unknownUsageRequests": 0,
+  "limitations": [
+    "Eight hand-authored synthetic cases do not establish real-world accuracy or savings.",
+    "Initial confidence thresholds are not calibrated on user traffic.",
+    "The gateway alias does not identify the native model revision."
+  ],
+  "rows": [
+    {
+      "id": "access-blocked",
+      "expected": "fix_environment",
+      "actual": "fix_environment",
+      "correct": true,
+      "elapsedMs": 1080,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "FILE_ISSUE",
+        "reasons": [
+          "CLEAR_RUN_FAILURE"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "incomplete",
+            "confidence": 0.96,
+            "probabilities": {
+              "uncertain": 0,
+              "incomplete": 0.97,
+              "complete": 0.03
+            }
+          },
+          "user_outcome": {
+            "choice": "no_feedback",
+            "confidence": 0.96,
+            "probabilities": {
+              "no_feedback": 0.97,
+              "satisfied": 0,
+              "dissatisfied": 0.03
+            }
+          },
+          "run_health": {
+            "choice": "overt_failure",
+            "confidence": 0.98,
+            "probabilities": {
+              "healthy": 0.01,
+              "expectation_gap": 0,
+              "overt_failure": 0.99,
+              "silent_failure": 0
+            }
+          },
+          "model_fit": {
+            "choice": "uncertain",
+            "confidence": 0.79,
+            "probabilities": {
+              "keep_current": 0.16,
+              "try_faster": 0,
+              "try_more_capable": 0,
+              "uncertain": 0.84
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.99,
+              "probabilities": {
+                "uncertain": 0,
+                "stalled": 0.99,
+                "advancing": 0.01,
+                "complete": 0
+              }
+            },
+            "blocker": {
+              "choice": "environment",
+              "confidence": 1,
+              "probabilities": {
+                "none": 0,
+                "verification_gap": 0,
+                "environment": 1,
+                "uncertain": 0,
+                "missing_information": 0,
+                "ineffective_approach": 0,
+                "requirement_mismatch": 0
+              }
+            },
+            "next_step": {
+              "choice": "fix_environment",
+              "confidence": 0.79,
+              "probabilities": {
+                "realign": 0,
+                "review": 0.04,
+                "change_approach": 0.09,
+                "verify_result": 0,
+                "ask_question": 0.05,
+                "continue": 0.01,
+                "fix_environment": 0.8099999999999999
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1948,
+          "outputTokens": 406
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.79,
+          "basis": [
+            "Jev hat nicht genug Belege für einen Modellwechsel.",
+            "Jev hat 2 sichtbare Chatbeiträge und 2 Werkzeugaufrufe erhalten.",
+            "1 exakt wiederholte Werkzeugaufrufe mit gleichem Ergebnis."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.99,
+              "probabilities": {
+                "uncertain": 0,
+                "stalled": 0.99,
+                "advancing": 0.01,
+                "complete": 0
+              }
+            },
+            "blocker": {
+              "choice": "environment",
+              "confidence": 1,
+              "probabilities": {
+                "none": 0,
+                "verification_gap": 0,
+                "environment": 1,
+                "uncertain": 0,
+                "missing_information": 0,
+                "ineffective_approach": 0,
+                "requirement_mismatch": 0
+              }
+            },
+            "next_step": {
+              "choice": "fix_environment",
+              "confidence": 0.79,
+              "probabilities": {
+                "realign": 0,
+                "review": 0.04,
+                "change_approach": 0.09,
+                "verify_result": 0,
+                "ask_question": 0.05,
+                "continue": 0.01,
+                "fix_environment": 0.8099999999999999
+              }
+            }
+          },
+          "action": "fix_environment",
+          "status": "supported",
+          "reason": "AGREEMENT",
+          "title": "Zuerst die Arbeitsumgebung prüfen.",
+          "suggestedPrompt": "Prüfe den zuletzt gemeldeten Zugriffs-, Werkzeug- oder Umgebungsfehler. Benenne die fehlende Voraussetzung und den kleinsten passenden Prüfschritt. Wiederhole die fehlgeschlagene Aktion erst, wenn sich die Voraussetzung geändert hat. Gib keine Zugangsdaten im Chat aus."
+        }
+      }
+    },
+    {
+      "id": "missing-user-decision",
+      "expected": "ask_question",
+      "actual": "ask_question",
+      "correct": true,
+      "elapsedMs": 301,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "HUMAN_REVIEW",
+        "reasons": [
+          "LOW_CONFIDENCE_OR_UNCERTAIN"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "incomplete",
+            "confidence": 0.99,
+            "probabilities": {
+              "incomplete": 0.99,
+              "uncertain": 0.01,
+              "complete": 0
+            }
+          },
+          "user_outcome": {
+            "choice": "no_feedback",
+            "confidence": 1,
+            "probabilities": {
+              "no_feedback": 1,
+              "satisfied": 0,
+              "dissatisfied": 0
+            }
+          },
+          "run_health": {
+            "choice": "healthy",
+            "confidence": 0.51,
+            "probabilities": {
+              "overt_failure": 0.06,
+              "silent_failure": 0,
+              "expectation_gap": 0.3,
+              "healthy": 0.64
+            }
+          },
+          "model_fit": {
+            "choice": "keep_current",
+            "confidence": 0.34,
+            "probabilities": {
+              "uncertain": 0.44,
+              "try_faster": 0.04,
+              "try_more_capable": 0.01,
+              "keep_current": 0.51
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.75,
+              "probabilities": {
+                "stalled": 0.81,
+                "advancing": 0.13,
+                "uncertain": 0.06,
+                "complete": 0
+              }
+            },
+            "blocker": {
+              "choice": "missing_information",
+              "confidence": 1,
+              "probabilities": {
+                "verification_gap": 0,
+                "ineffective_approach": 0,
+                "requirement_mismatch": 0,
+                "none": 0,
+                "uncertain": 0,
+                "missing_information": 1,
+                "environment": 0
+              }
+            },
+            "next_step": {
+              "choice": "ask_question",
+              "confidence": 0.97,
+              "probabilities": {
+                "verify_result": 0,
+                "change_approach": 0,
+                "realign": 0,
+                "ask_question": 0.99,
+                "fix_environment": 0,
+                "review": 0,
+                "continue": 0.01
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1893,
+          "outputTokens": 404
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.34,
+          "basis": [
+            "Jev hat nicht genug Belege für einen Modellwechsel.",
+            "Jev hat 2 sichtbare Chatbeiträge und 0 Werkzeugaufrufe erhalten."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.75,
+              "probabilities": {
+                "stalled": 0.81,
+                "advancing": 0.13,
+                "uncertain": 0.06,
+                "complete": 0
+              }
+            },
+            "blocker": {
+              "choice": "missing_information",
+              "confidence": 1,
+              "probabilities": {
+                "verification_gap": 0,
+                "ineffective_approach": 0,
+                "requirement_mismatch": 0,
+                "none": 0,
+                "uncertain": 0,
+                "missing_information": 1,
+                "environment": 0
+              }
+            },
+            "next_step": {
+              "choice": "ask_question",
+              "confidence": 0.97,
+              "probabilities": {
+                "verify_result": 0,
+                "change_approach": 0,
+                "realign": 0,
+                "ask_question": 0.99,
+                "fix_environment": 0,
+                "review": 0,
+                "continue": 0.01
+              }
+            }
+          },
+          "action": "ask_question",
+          "status": "supported",
+          "reason": "AGREEMENT",
+          "title": "Eine entscheidende Angabe fehlt.",
+          "suggestedPrompt": "Benenne die eine fehlende Entscheidung, ohne die du nicht weiterkommst. Prüfe zuerst, ob sie bereits im Verlauf steht oder mit verfügbaren Werkzeugen ermittelt werden kann. Falls nicht, stelle eine konkrete Frage."
+        }
+      }
+    },
+    {
+      "id": "failed-approach",
+      "expected": "change_approach",
+      "actual": "change_approach",
+      "correct": true,
+      "elapsedMs": 273,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "HUMAN_REVIEW",
+        "reasons": [
+          "LOW_CONFIDENCE_OR_UNCERTAIN"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "incomplete",
+            "confidence": 1,
+            "probabilities": {
+              "uncertain": 0,
+              "incomplete": 1,
+              "complete": 0
+            }
+          },
+          "user_outcome": {
+            "choice": "dissatisfied",
+            "confidence": 0.49,
+            "probabilities": {
+              "dissatisfied": 0.66,
+              "satisfied": 0,
+              "no_feedback": 0.34
+            }
+          },
+          "run_health": {
+            "choice": "overt_failure",
+            "confidence": 1,
+            "probabilities": {
+              "overt_failure": 1,
+              "healthy": 0,
+              "expectation_gap": 0,
+              "silent_failure": 0
+            }
+          },
+          "model_fit": {
+            "choice": "try_more_capable",
+            "confidence": 0.84,
+            "probabilities": {
+              "uncertain": 0.12,
+              "keep_current": 0.01,
+              "try_faster": 0,
+              "try_more_capable": 0.87
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 1,
+              "probabilities": {
+                "stalled": 1,
+                "advancing": 0,
+                "uncertain": 0,
+                "complete": 0
+              }
+            },
+            "blocker": {
+              "choice": "ineffective_approach",
+              "confidence": 0.99,
+              "probabilities": {
+                "missing_information": 0,
+                "requirement_mismatch": 0,
+                "none": 0,
+                "uncertain": 0,
+                "environment": 0,
+                "ineffective_approach": 1,
+                "verification_gap": 0
+              }
+            },
+            "next_step": {
+              "choice": "change_approach",
+              "confidence": 0.99,
+              "probabilities": {
+                "ask_question": 0,
+                "continue": 0,
+                "realign": 0,
+                "fix_environment": 0,
+                "verify_result": 0,
+                "review": 0,
+                "change_approach": 1
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 2002,
+          "outputTokens": 417
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "try_more_capable",
+          "confidence": 0.84,
+          "basis": [
+            "Jev sieht Hinweise auf eine mögliche Fähigkeitsgrenze und empfiehlt, bei ähnlichen Aufgaben ein stärkeres Modell zu testen.",
+            "Jev hat 2 sichtbare Chatbeiträge und 3 Werkzeugaufrufe erhalten.",
+            "2 exakt wiederholte Werkzeugaufrufe mit gleichem Ergebnis."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 1,
+              "probabilities": {
+                "stalled": 1,
+                "advancing": 0,
+                "uncertain": 0,
+                "complete": 0
+              }
+            },
+            "blocker": {
+              "choice": "ineffective_approach",
+              "confidence": 0.99,
+              "probabilities": {
+                "missing_information": 0,
+                "requirement_mismatch": 0,
+                "none": 0,
+                "uncertain": 0,
+                "environment": 0,
+                "ineffective_approach": 1,
+                "verification_gap": 0
+              }
+            },
+            "next_step": {
+              "choice": "change_approach",
+              "confidence": 0.99,
+              "probabilities": {
+                "ask_question": 0,
+                "continue": 0,
+                "realign": 0,
+                "fix_environment": 0,
+                "verify_result": 0,
+                "review": 0,
+                "change_approach": 1
+              }
+            }
+          },
+          "action": "change_approach",
+          "status": "supported",
+          "reason": "AGREEMENT",
+          "title": "Der bisherige Lösungsweg scheint festzustecken.",
+          "suggestedPrompt": "Fasse den bisherigen Ansatz und die Gegenbelege kurz zusammen. Wähle eine andere überprüfbare Hypothese und teste sie mit dem kleinsten aussagekräftigen Schritt. Wiederhole den bisherigen Ansatz nur mit neuer Evidenz."
+        }
+      }
+    },
+    {
+      "id": "unverified-success",
+      "expected": "verify_result",
+      "actual": "review",
+      "correct": false,
+      "elapsedMs": 338,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "PRIORITY_REVIEW",
+        "reasons": [
+          "SUCCESS_CLAIM_WITHOUT_SUPPORT"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "incomplete",
+            "confidence": 1,
+            "probabilities": {
+              "complete": 0,
+              "incomplete": 1,
+              "uncertain": 0
+            }
+          },
+          "user_outcome": {
+            "choice": "no_feedback",
+            "confidence": 0.94,
+            "probabilities": {
+              "dissatisfied": 0.04,
+              "no_feedback": 0.96,
+              "satisfied": 0
+            }
+          },
+          "run_health": {
+            "choice": "silent_failure",
+            "confidence": 0.98,
+            "probabilities": {
+              "silent_failure": 0.99,
+              "expectation_gap": 0.01,
+              "overt_failure": 0,
+              "healthy": 0
+            }
+          },
+          "model_fit": {
+            "choice": "try_more_capable",
+            "confidence": 0.85,
+            "probabilities": {
+              "try_more_capable": 0.88,
+              "keep_current": 0.01,
+              "try_faster": 0,
+              "uncertain": 0.11
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.39,
+              "probabilities": {
+                "stalled": 0.54,
+                "complete": 0,
+                "advancing": 0.18,
+                "uncertain": 0.28
+              }
+            },
+            "blocker": {
+              "choice": "verification_gap",
+              "confidence": 0.99,
+              "probabilities": {
+                "none": 0,
+                "environment": 0,
+                "ineffective_approach": 0,
+                "missing_information": 0,
+                "verification_gap": 0.99,
+                "requirement_mismatch": 0.01,
+                "uncertain": 0
+              }
+            },
+            "next_step": {
+              "choice": "verify_result",
+              "confidence": 0.46,
+              "probabilities": {
+                "ask_question": 0,
+                "review": 0,
+                "realign": 0.46,
+                "change_approach": 0,
+                "fix_environment": 0,
+                "verify_result": 0.54,
+                "continue": 0
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1916,
+          "outputTokens": 407
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.85,
+          "basis": [
+            "Kein Modellwechsel empfohlen: Zuerst die erkannte Voraussetzung klären oder die widersprüchlichen Einschätzungen prüfen."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.39,
+              "probabilities": {
+                "stalled": 0.54,
+                "complete": 0,
+                "advancing": 0.18,
+                "uncertain": 0.28
+              }
+            },
+            "blocker": {
+              "choice": "verification_gap",
+              "confidence": 0.99,
+              "probabilities": {
+                "none": 0,
+                "environment": 0,
+                "ineffective_approach": 0,
+                "missing_information": 0,
+                "verification_gap": 0.99,
+                "requirement_mismatch": 0.01,
+                "uncertain": 0
+              }
+            },
+            "next_step": {
+              "choice": "verify_result",
+              "confidence": 0.46,
+              "probabilities": {
+                "ask_question": 0,
+                "review": 0,
+                "realign": 0.46,
+                "change_approach": 0,
+                "fix_environment": 0,
+                "verify_result": 0.54,
+                "continue": 0
+              }
+            }
+          },
+          "action": "review",
+          "status": "uncertain",
+          "reason": "LOW_CONFIDENCE",
+          "title": "Jev hat keine ausreichend klare Grundlage für einen Eingriff."
+        }
+      }
+    },
+    {
+      "id": "missed-requirement",
+      "expected": "realign",
+      "actual": "review",
+      "correct": false,
+      "elapsedMs": 276,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "HUMAN_REVIEW",
+        "reasons": [
+          "LOW_CONFIDENCE_OR_UNCERTAIN"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "incomplete",
+            "confidence": 0.98,
+            "probabilities": {
+              "uncertain": 0.01,
+              "complete": 0,
+              "incomplete": 0.99
+            }
+          },
+          "user_outcome": {
+            "choice": "no_feedback",
+            "confidence": 0.99,
+            "probabilities": {
+              "dissatisfied": 0,
+              "no_feedback": 1,
+              "satisfied": 0
+            }
+          },
+          "run_health": {
+            "choice": "silent_failure",
+            "confidence": 0.69,
+            "probabilities": {
+              "silent_failure": 0.77,
+              "overt_failure": 0.13,
+              "expectation_gap": 0.1,
+              "healthy": 0
+            }
+          },
+          "model_fit": {
+            "choice": "try_more_capable",
+            "confidence": 0.94,
+            "probabilities": {
+              "try_faster": 0,
+              "uncertain": 0.04,
+              "try_more_capable": 0.95,
+              "keep_current": 0.01
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.92,
+              "probabilities": {
+                "advancing": 0,
+                "uncertain": 0.05,
+                "complete": 0,
+                "stalled": 0.95
+              }
+            },
+            "blocker": {
+              "choice": "requirement_mismatch",
+              "confidence": 0.7,
+              "probabilities": {
+                "uncertain": 0,
+                "missing_information": 0,
+                "none": 0,
+                "environment": 0,
+                "verification_gap": 0.25,
+                "requirement_mismatch": 0.75,
+                "ineffective_approach": 0
+              }
+            },
+            "next_step": {
+              "choice": "realign",
+              "confidence": 0.93,
+              "probabilities": {
+                "fix_environment": 0,
+                "continue": 0,
+                "realign": 0.94,
+                "ask_question": 0,
+                "review": 0,
+                "change_approach": 0.01,
+                "verify_result": 0.05
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1886,
+          "outputTokens": 412
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.94,
+          "basis": [
+            "Kein Modellwechsel empfohlen: Zuerst die erkannte Voraussetzung klären oder die widersprüchlichen Einschätzungen prüfen."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "stalled",
+              "confidence": 0.92,
+              "probabilities": {
+                "advancing": 0,
+                "uncertain": 0.05,
+                "complete": 0,
+                "stalled": 0.95
+              }
+            },
+            "blocker": {
+              "choice": "requirement_mismatch",
+              "confidence": 0.7,
+              "probabilities": {
+                "uncertain": 0,
+                "missing_information": 0,
+                "none": 0,
+                "environment": 0,
+                "verification_gap": 0.25,
+                "requirement_mismatch": 0.75,
+                "ineffective_approach": 0
+              }
+            },
+            "next_step": {
+              "choice": "realign",
+              "confidence": 0.93,
+              "probabilities": {
+                "fix_environment": 0,
+                "continue": 0,
+                "realign": 0.94,
+                "ask_question": 0,
+                "review": 0,
+                "change_approach": 0.01,
+                "verify_result": 0.05
+              }
+            }
+          },
+          "action": "review",
+          "status": "uncertain",
+          "reason": "LOW_CONFIDENCE",
+          "title": "Jev hat keine ausreichend klare Grundlage für einen Eingriff."
+        }
+      }
+    },
+    {
+      "id": "productive-repetition",
+      "expected": "none",
+      "actual": "review",
+      "correct": false,
+      "elapsedMs": 295,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "HUMAN_REVIEW",
+        "reasons": [
+          "LOW_CONFIDENCE_OR_UNCERTAIN"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "incomplete",
+            "confidence": 0.99,
+            "probabilities": {
+              "uncertain": 0.01,
+              "complete": 0,
+              "incomplete": 0.99
+            }
+          },
+          "user_outcome": {
+            "choice": "no_feedback",
+            "confidence": 0.73,
+            "probabilities": {
+              "dissatisfied": 0.18,
+              "no_feedback": 0.82,
+              "satisfied": 0
+            }
+          },
+          "run_health": {
+            "choice": "overt_failure",
+            "confidence": 0.35,
+            "probabilities": {
+              "silent_failure": 0.04,
+              "healthy": 0.04,
+              "expectation_gap": 0.41,
+              "overt_failure": 0.51
+            }
+          },
+          "model_fit": {
+            "choice": "uncertain",
+            "confidence": 0.75,
+            "probabilities": {
+              "try_more_capable": 0.07,
+              "uncertain": 0.81,
+              "try_faster": 0,
+              "keep_current": 0.12
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "advancing",
+              "confidence": 0.82,
+              "probabilities": {
+                "uncertain": 0.1,
+                "complete": 0,
+                "advancing": 0.87,
+                "stalled": 0.03
+              }
+            },
+            "blocker": {
+              "choice": "requirement_mismatch",
+              "confidence": 0.21,
+              "probabilities": {
+                "uncertain": 0.26,
+                "environment": 0,
+                "missing_information": 0.01,
+                "ineffective_approach": 0.02,
+                "requirement_mismatch": 0.32,
+                "verification_gap": 0.28,
+                "none": 0.11
+              }
+            },
+            "next_step": {
+              "choice": "continue",
+              "confidence": 0.84,
+              "probabilities": {
+                "change_approach": 0,
+                "fix_environment": 0,
+                "verify_result": 0.02,
+                "continue": 0.87,
+                "review": 0.11,
+                "realign": 0,
+                "ask_question": 0
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1985,
+          "outputTokens": 412
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.75,
+          "basis": [
+            "Jev hat nicht genug Belege für einen Modellwechsel.",
+            "Jev hat 2 sichtbare Chatbeiträge und 3 Werkzeugaufrufe erhalten."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "advancing",
+              "confidence": 0.82,
+              "probabilities": {
+                "uncertain": 0.1,
+                "complete": 0,
+                "advancing": 0.87,
+                "stalled": 0.03
+              }
+            },
+            "blocker": {
+              "choice": "requirement_mismatch",
+              "confidence": 0.21,
+              "probabilities": {
+                "uncertain": 0.26,
+                "environment": 0,
+                "missing_information": 0.01,
+                "ineffective_approach": 0.02,
+                "requirement_mismatch": 0.32,
+                "verification_gap": 0.28,
+                "none": 0.11
+              }
+            },
+            "next_step": {
+              "choice": "continue",
+              "confidence": 0.84,
+              "probabilities": {
+                "change_approach": 0,
+                "fix_environment": 0,
+                "verify_result": 0.02,
+                "continue": 0.87,
+                "review": 0.11,
+                "realign": 0,
+                "ask_question": 0
+              }
+            }
+          },
+          "action": "review",
+          "status": "uncertain",
+          "reason": "LOW_CONFIDENCE",
+          "title": "Jev hat keine ausreichend klare Grundlage für einen Eingriff."
+        }
+      }
+    },
+    {
+      "id": "verified-complete",
+      "expected": "none",
+      "actual": "review",
+      "correct": false,
+      "elapsedMs": 270,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "HUMAN_REVIEW",
+        "reasons": [
+          "LOW_CONFIDENCE_OR_UNCERTAIN"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "complete",
+            "confidence": 0.74,
+            "probabilities": {
+              "incomplete": 0,
+              "complete": 0.83,
+              "uncertain": 0.17
+            }
+          },
+          "user_outcome": {
+            "choice": "satisfied",
+            "confidence": 0.98,
+            "probabilities": {
+              "dissatisfied": 0,
+              "no_feedback": 0.01,
+              "satisfied": 0.99
+            }
+          },
+          "run_health": {
+            "choice": "healthy",
+            "confidence": 0.88,
+            "probabilities": {
+              "healthy": 0.91,
+              "silent_failure": 0.07,
+              "expectation_gap": 0.02,
+              "overt_failure": 0
+            }
+          },
+          "model_fit": {
+            "choice": "keep_current",
+            "confidence": 0.45,
+            "probabilities": {
+              "try_more_capable": 0,
+              "keep_current": 0.58,
+              "try_faster": 0.22,
+              "uncertain": 0.2
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "complete",
+              "confidence": 0.93,
+              "probabilities": {
+                "advancing": 0.01,
+                "complete": 0.94,
+                "uncertain": 0.05,
+                "stalled": 0
+              }
+            },
+            "blocker": {
+              "choice": "none",
+              "confidence": 0.84,
+              "probabilities": {
+                "ineffective_approach": 0,
+                "none": 0.86,
+                "environment": 0,
+                "missing_information": 0,
+                "requirement_mismatch": 0,
+                "uncertain": 0.01,
+                "verification_gap": 0.13
+              }
+            },
+            "next_step": {
+              "choice": "continue",
+              "confidence": 0.59,
+              "probabilities": {
+                "ask_question": 0,
+                "verify_result": 0.3,
+                "change_approach": 0,
+                "fix_environment": 0,
+                "continue": 0.65,
+                "realign": 0,
+                "review": 0.05
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1949,
+          "outputTokens": 400
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.45,
+          "basis": [
+            "Jev hat nicht genug Belege für einen Modellwechsel.",
+            "Jev hat 3 sichtbare Chatbeiträge und 1 Werkzeugaufrufe erhalten."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "complete",
+              "confidence": 0.93,
+              "probabilities": {
+                "advancing": 0.01,
+                "complete": 0.94,
+                "uncertain": 0.05,
+                "stalled": 0
+              }
+            },
+            "blocker": {
+              "choice": "none",
+              "confidence": 0.84,
+              "probabilities": {
+                "ineffective_approach": 0,
+                "none": 0.86,
+                "environment": 0,
+                "missing_information": 0,
+                "requirement_mismatch": 0,
+                "uncertain": 0.01,
+                "verification_gap": 0.13
+              }
+            },
+            "next_step": {
+              "choice": "continue",
+              "confidence": 0.59,
+              "probabilities": {
+                "ask_question": 0,
+                "verify_result": 0.3,
+                "change_approach": 0,
+                "fix_environment": 0,
+                "continue": 0.65,
+                "realign": 0,
+                "review": 0.05
+              }
+            }
+          },
+          "action": "review",
+          "status": "uncertain",
+          "reason": "LOW_CONFIDENCE",
+          "title": "Jev hat keine ausreichend klare Grundlage für einen Eingriff."
+        }
+      }
+    },
+    {
+      "id": "insufficient-evidence",
+      "expected": "review",
+      "actual": "review",
+      "correct": true,
+      "elapsedMs": 300,
+      "result": {
+        "provider": "jev",
+        "model": "typesafe-ai/jev",
+        "policyVersion": "agent-trace-triage-v1",
+        "synthetic": false,
+        "recommendation": "HUMAN_REVIEW",
+        "reasons": [
+          "LOW_CONFIDENCE_OR_UNCERTAIN"
+        ],
+        "labels": {
+          "task_outcome": {
+            "choice": "uncertain",
+            "confidence": 0.26,
+            "probabilities": {
+              "complete": 0,
+              "incomplete": 0.49,
+              "uncertain": 0.51
+            }
+          },
+          "user_outcome": {
+            "choice": "dissatisfied",
+            "confidence": 0.76,
+            "probabilities": {
+              "dissatisfied": 0.84,
+              "satisfied": 0,
+              "no_feedback": 0.16
+            }
+          },
+          "run_health": {
+            "choice": "healthy",
+            "confidence": 0.19,
+            "probabilities": {
+              "overt_failure": 0.2,
+              "healthy": 0.4,
+              "expectation_gap": 0.36,
+              "silent_failure": 0.04
+            }
+          },
+          "model_fit": {
+            "choice": "uncertain",
+            "confidence": 0.98,
+            "probabilities": {
+              "keep_current": 0.01,
+              "try_more_capable": 0,
+              "try_faster": 0,
+              "uncertain": 0.99
+            }
+          },
+          "recovery": {
+            "progress": {
+              "choice": "uncertain",
+              "confidence": 0.99,
+              "probabilities": {
+                "stalled": 0.01,
+                "complete": 0,
+                "advancing": 0,
+                "uncertain": 0.99
+              }
+            },
+            "blocker": {
+              "choice": "uncertain",
+              "confidence": 0.87,
+              "probabilities": {
+                "uncertain": 0.9,
+                "verification_gap": 0,
+                "ineffective_approach": 0,
+                "environment": 0,
+                "missing_information": 0.07,
+                "requirement_mismatch": 0,
+                "none": 0.03
+              }
+            },
+            "next_step": {
+              "choice": "review",
+              "confidence": 0.95,
+              "probabilities": {
+                "fix_environment": 0,
+                "continue": 0,
+                "review": 0.96,
+                "realign": 0,
+                "ask_question": 0.04,
+                "verify_result": 0,
+                "change_approach": 0
+              }
+            }
+          }
+        },
+        "providerUsage": {
+          "inputTokens": 1856,
+          "outputTokens": 408
+        },
+        "modelRecommendation": {
+          "currentModel": "unspecified-coding-model",
+          "action": "uncertain",
+          "confidence": 0.98,
+          "basis": [
+            "Jev hat nicht genug Belege für einen Modellwechsel.",
+            "Jev hat 1 sichtbare Chatbeiträge und 0 Werkzeugaufrufe erhalten."
+          ]
+        },
+        "recoveryAdvice": {
+          "policyVersion": "recovery-v1",
+          "signals": {
+            "progress": {
+              "choice": "uncertain",
+              "confidence": 0.99,
+              "probabilities": {
+                "stalled": 0.01,
+                "complete": 0,
+                "advancing": 0,
+                "uncertain": 0.99
+              }
+            },
+            "blocker": {
+              "choice": "uncertain",
+              "confidence": 0.87,
+              "probabilities": {
+                "uncertain": 0.9,
+                "verification_gap": 0,
+                "ineffective_approach": 0,
+                "environment": 0,
+                "missing_information": 0.07,
+                "requirement_mismatch": 0,
+                "none": 0.03
+              }
+            },
+            "next_step": {
+              "choice": "review",
+              "confidence": 0.95,
+              "probabilities": {
+                "fix_environment": 0,
+                "continue": 0,
+                "review": 0.96,
+                "realign": 0,
+                "ask_question": 0.04,
+                "verify_result": 0,
+                "change_approach": 0
+              }
+            }
+          },
+          "action": "review",
+          "status": "uncertain",
+          "reason": "LOW_CONFIDENCE",
+          "title": "Jev hat keine ausreichend klare Grundlage für einen Eingriff."
+        }
+      }
+    }
+  ]
+}
