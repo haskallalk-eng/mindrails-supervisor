@@ -7,7 +7,7 @@
 
 MindRails Supervisor brings together a model-advice plugin, a local chat app and an MCP server for completion checks and repeat-loop detection. The optional model-backed checks use [Jev](https://typesafe.ai); the offline demo works without an account or API key.
 
-[Offline demo](#try-the-free-offline-demo) · [Setup and technical reference](docs/supervisor-reference.md) · [Verification](docs/portfolio-validation.md) · [Hassieb Kalla's portfolio](https://github.com/haskallalk-eng)
+[Offline demo](#try-the-free-offline-demo) · [Schritt-für-Schritt-Demo](docs/offline-walkthrough.md) · [Setup and technical reference](docs/supervisor-reference.md) · [Verification](docs/portfolio-validation.md) · [Hassieb Kalla's portfolio](https://github.com/haskallalk-eng)
 
 **Deutsch:** Ein Projekt von **MindRails** für die Arbeit mit Coding-Agenten: passende Modelle vorschlagen, Aufgaben anhand vorgegebener Kriterien prüfen und wiederholte Arbeitsschritte erkennen. Die Offline-Demo unten zeigt die Entscheidungslogik anhand synthetischer Beispiele.
 
@@ -50,6 +50,8 @@ changed result → CONTINUE
 
 The demo runs the implementation with explicit markers and supplied fixtures. It demonstrates policy mechanics, **not model accuracy**.
 
+[Follow the walkthrough](docs/offline-walkthrough.md) to inspect an input, read its JSON result and trace the decision back to the source.
+
 ## Choose an entry point
 
 - **Try the behavior:** run the offline demo above.
@@ -63,7 +65,7 @@ The demo runs the implementation with explicit markers and supplied fixtures. It
 
 | Check | Result |
 | --- | --- |
-| Build and automated tests | 132 passed |
+| Build and automated tests | 133 passed |
 | TypeScript | Passed |
 | MCP transport scenarios | 12 passed |
 | Offline demo | Documented decisions reproduced |
