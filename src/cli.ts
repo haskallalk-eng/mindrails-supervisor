@@ -8,6 +8,9 @@ import { MockProvider, JevProvider } from './providers.js';
 import { createTraceTriage } from './triage.js';
 import { traceTriageSchema } from './trace.js';
 
+// Kept aligned with package.json by the CLI and MCP transport tests.
+const VERSION = '0.8.0';
+
 function createSupervisor() {
   const mode = process.env.MINDRAILS_PROVIDER;
   if (!mode) throw new SafeError('MINDRAILS_PROVIDER_REQUIRED');
@@ -36,7 +39,7 @@ function createTriage() {
 async function main() {
   const [command, file] = process.argv.slice(2);
   if (!command || command === '--help') {
-    console.log('Mindrails Supervisor v0.2.0\nUsage: mindrails-supervisor demo | check <file.json> | triage <file.json> | stuck <file.json> | mcp\nCompletion uses artifact evidence by default. Set evidenceMode to fact-check to require source evidence. The demo is always synthetic. check, triage and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev defaults to the native TypeSafe route and TYPESAFE_API_KEY. The optional Vercel route uses MINDRAILS_JEV_ROUTE=vercel-ai-gateway and AI_GATEWAY_API_KEY. Inference may cost money.'); return;
+    console.log(`MindRails Supervisor v${VERSION}\nUsage: mindrails-supervisor demo | check <file.json> | triage <file.json> | stuck <file.json> | mcp\nCompletion uses artifact evidence by default. Set evidenceMode to fact-check to require source evidence. The demo is always synthetic. check, triage and mcp require explicit MINDRAILS_PROVIDER=mock or jev; stuck is deterministic. Jev defaults to the native TypeSafe route and TYPESAFE_API_KEY. The optional Vercel route uses MINDRAILS_JEV_ROUTE=vercel-ai-gateway and AI_GATEWAY_API_KEY. Inference may cost money.`); return;
   }
   if (command === 'demo') {
     const supervisor = new Supervisor(new MockProvider());
@@ -52,7 +55,7 @@ async function main() {
     return;
   }
   if (command === 'mcp') {
-    const server = new McpServer({name:'mindrails-supervisor',version:'0.2.0'});
+    const server = new McpServer({name:'mindrails-supervisor',version:VERSION});
     let supervisor: Supervisor | undefined;
     let triage: ReturnType<typeof createTriage> | undefined;
     const getSupervisor = () => supervisor ??= createSupervisor();

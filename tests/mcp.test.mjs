@@ -3,12 +3,19 @@ import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+const packageVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+test('CLI identifies the published package version', () => {
+  const output = execFileSync(process.execPath, ['dist/cli.js', '--help'], {encoding:'utf8'});
+  assert.equal(output.split('\n')[0], `MindRails Supervisor v${packageVersion}`);
+});
 test('official MCP client initializes, lists and invokes all tools',async()=>{
   const transport=new StdioClientTransport({command:process.execPath,args:['dist/cli.js','mcp'],env:{MINDRAILS_PROVIDER:'mock'},stderr:'pipe'});
   let stderr=''; transport.stderr?.on('data',d=>stderr+=d);
   const client=new Client({name:'integration-test',version:'0.1.0'});
   try {
     await client.connect(transport);
+    assert.equal(client.getServerVersion().version, packageVersion);
     const tools=await client.listTools(); assert.deepEqual(tools.tools.map(t=>t.name).sort(),['check_completion','detect_stuck','open_codex_chats','triage_agent_run']);
     const overview=await client.callTool({name:'open_codex_chats',arguments:{}});assert.equal(overview.structuredContent.apiCallsForMonitoring,0);
     const result=await client.callTool({name:'check_completion',arguments:{task:'Document release',currentResult:'[done:docs]',requirements:[{id:'docs',description:'Docs'}],evidence:'synthetic'}});
