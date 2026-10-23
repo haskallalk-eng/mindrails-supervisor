@@ -211,7 +211,7 @@ npm test
 npm pack
 ```
 
-Tests cover policy vetoes, bounds, timeouts, malformed responses, budgets, loop detection, trace triage, CLI and actual MCP transport. `npm run e2e` prints eleven concrete official-client scenarios. `npm run evidence` reproduces the fixed completion comparison and deterministic-policy baselines. The datasets are synthetic; no production accuracy, cost savings or performance benchmark is claimed. See [evidence](../docs/evidence.md), [architecture](../docs/architecture.md), [provenance](../docs/provenance.md), [security](../SECURITY.md) and [contributing](../CONTRIBUTING.md).
+Tests cover policy vetoes, bounds, timeouts, malformed responses, budgets, loop detection, trace triage, CLI and actual MCP transport. `npm run e2e` prints twelve concrete official-client scenarios. `npm run evidence` reproduces the fixed completion comparison and deterministic-policy baselines. The datasets are synthetic; no production accuracy, cost savings or performance benchmark is claimed. See [evidence](../docs/evidence.md), [architecture](../docs/architecture.md), [provenance](../docs/provenance.md), [security](../SECURITY.md) and [contributing](../CONTRIBUTING.md).
 
 The supervisor server itself intentionally excludes hosted MCP, persistent run state, dashboards and automatic actions (routing lives in the Jev plugin and app). Feedback on incorrect decisions is welcome using synthetic or redacted examples. No npm registry publication is provided; use the repository or GitHub release package.
 
