@@ -2,7 +2,7 @@
 // keeps the full history (user messages, answers, what the agents ran and changed) and, per
 // agent, its own native session plus how far that session has already seen the history. A
 // switch hands the unseen part over as text (src/jev-app/route.ts, handover).
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -44,7 +44,7 @@ const conversationSchema = z.looseObject({
   agents: z.looseObject({ claude: agentStateSchema.optional(), codex: agentStateSchema.optional() }),
   origin: z.looseObject({ kind: agentKind, id: z.string().min(1), title: z.string() }).nullable().optional(),
 }).refine(c => [c.agents.claude, c.agents.codex].every(a => !a || a.seenUpTo <= c.messages.length));
-export type ConversationProblem = { file: string; reason: 'invalid-id' | 'invalid-json' | 'invalid-record' };
+export type ConversationProblem = { file: string; reason: 'invalid-id' | 'invalid-json' | 'invalid-record' | 'not-regular-file' | 'unreadable' };
 
 export class ConversationStore {
   private dir: string;
@@ -62,8 +62,16 @@ export class ConversationStore {
     if (!isId(id)) return null;
     const filename = `${id}.json`;
     let raw: string;
-    try { raw = readFileSync(this.file(id), 'utf8'); }
-    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; this.problems.delete(filename); return null; }
+    try {
+      const path = this.file(id);
+      if (!lstatSync(path).isFile()) { this.problems.set(filename, { file: filename, reason: 'not-regular-file' }); return null; }
+      raw = readFileSync(path, 'utf8');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') this.problems.delete(filename);
+      else this.problems.set(filename, { file: filename, reason: code === 'EISDIR' ? 'not-regular-file' : 'unreadable' });
+      return null;
+    }
     let value: unknown;
     try { value = JSON.parse(raw); }
     catch { this.problems.set(filename, { file: filename, reason: 'invalid-json' }); return null; }
@@ -78,7 +86,7 @@ export class ConversationStore {
     if (!conversationSchema.safeParse(c).success) throw new Error('INVALID_CONVERSATION_RECORD');
     const file = this.file(c.id);
     // Do not replace unreadable/corrupted data with a stale in-memory copy. Recovery is explicit.
-    if (existsSync(file) && !this.get(c.id)) throw new Error('CORRUPT_CONVERSATION_FILE');
+    if (!this.get(c.id) && this.problems.has(`${c.id}.json`)) throw new Error('CORRUPT_CONVERSATION_FILE');
     c.updatedAt = Date.now();
     const tmp = `${file}.${randomUUID()}.tmp`;
     writeFileSync(tmp, JSON.stringify(c)); renameSync(tmp, file);

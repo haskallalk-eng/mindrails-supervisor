@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, readFile, writeFile, stat } from 'node:fs/promises';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -74,4 +76,59 @@ test('app state remains available and reports damaged conversation files without
   assert.deepEqual(state.conversationProblems, [{ file: `${bad.id}.json`, reason: 'invalid-record' }]);
   assert.ok(!JSON.stringify(state).includes('must not be returned'));
   assert.equal(await readFile(file(dir, bad.id), 'utf8'), raw);
+});
+
+test('a UUID.json directory cannot break the conversation list or app state and is never replaced', async (t) => {
+  const { startApp } = await import('../dist/jev-app/app.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-directory-record-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const store = new ConversationStore(dir), good = store.create({ cwd: dir }), badId = randomUUID();
+  const directory = file(dir, badId); await mkdir(directory);
+  await writeFile(join(directory, 'keep.txt'), 'original directory contents');
+  assert.throws(() => fs.readFileSync(directory, 'utf8'), { code: 'EISDIR' }, 'real filesystem reproduction of the review finding');
+  assert.equal(store.get(badId), null);
+  assert.deepEqual(store.list().map(c => c.id), [good.id]);
+  assert.deepEqual(store.getProblems(), [{ file: `${badId}.json`, reason: 'not-regular-file' }]);
+  assert.throws(() => store.save({ ...good, id: badId }), /CORRUPT_CONVERSATION_FILE/);
+  assert.ok((await stat(directory)).isDirectory());
+  assert.equal(await readFile(join(directory, 'keep.txt'), 'utf8'), 'original directory contents');
+  const token = 'c'.repeat(48);
+  const app = await startApp({ stateDir: dir, port: 0, token, available: () => ({ claude: false, codex: false }), catalog: () => [] });
+  t.after(() => app.close());
+  const response = await fetch(`${app.url.split('/?')[0]}/api/state`, { headers: { 'x-jev-token': token } });
+  assert.equal(response.status, 200);
+  const state = await response.json();
+  assert.deepEqual(state.conversations.map(c => c.id), [good.id]);
+  assert.deepEqual(state.conversationProblems, [{ file: `${badId}.json`, reason: 'not-regular-file' }]);
+});
+
+test('a simulated EACCES read leaves good conversations available, warns, and refuses stale overwrite', async (t) => {
+  const { startApp } = await import('../dist/jev-app/app.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-unreadable-record-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const store = new ConversationStore(dir), good = store.create({ cwd: dir }), bad = store.create({ cwd: dir });
+  const blockedPath = file(dir, bad.id), before = await readFile(blockedPath, 'utf8');
+  const originalRead = fs.readFileSync; let deniedReads = 0;
+  // ACL behavior depends on the OS/test account. Inject only the read error at the filesystem boundary.
+  const mock = t.mock.method(fs, 'readFileSync', function (path, ...args) {
+    if (String(path) === blockedPath) { deniedReads++; throw Object.assign(new Error('synthetic permission denied'), { code: 'EACCES' }); }
+    return originalRead.call(this, path, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { mock.mock.restore(); syncBuiltinESMExports(); });
+  assert.equal(store.get(bad.id), null);
+  assert.deepEqual(store.list().map(c => c.id), [good.id]);
+  assert.deepEqual(store.getProblems(), [{ file: `${bad.id}.json`, reason: 'unreadable' }]);
+  assert.throws(() => store.save(bad), /CORRUPT_CONVERSATION_FILE/);
+  const token = 'd'.repeat(48);
+  const app = await startApp({ stateDir: dir, port: 0, token, available: () => ({ claude: false, codex: false }), catalog: () => [] });
+  t.after(() => app.close());
+  const response = await fetch(`${app.url.split('/?')[0]}/api/state`, { headers: { 'x-jev-token': token } });
+  assert.equal(response.status, 200);
+  const state = await response.json();
+  assert.deepEqual(state.conversations.map(c => c.id), [good.id]);
+  assert.deepEqual(state.conversationProblems, [{ file: `${bad.id}.json`, reason: 'unreadable' }]);
+  assert.ok(deniedReads >= 4, 'get, list, save and API all exercised the injected read failure');
+  mock.mock.restore(); syncBuiltinESMExports();
+  assert.equal(await readFile(blockedPath, 'utf8'), before);
+  assert.equal(store.get(bad.id).id, bad.id);
+  assert.deepEqual(store.getProblems(), [], 'the warning clears when the file becomes readable again');
 });
