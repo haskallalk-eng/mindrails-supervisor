@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 2026-10-23
+
+- Track tool requests, permissions and observed results separately; denied or unfinished actions no longer appear as completed work in the app, imports or agent handoffs.
+- Validate persisted conversations, surface malformed files and preserve them for explicit recovery.
+- Update MCP client/server to 2.3.1 and add regression coverage. [Verification and limits](docs/portfolio-validation.md).
+
 ## 0.8.0 — 2026-10-01
 
 Finished preview; the project is complete as published.
