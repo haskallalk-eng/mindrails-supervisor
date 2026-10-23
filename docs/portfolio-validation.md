@@ -1,10 +1,10 @@
 # Technical verification – Mindrails Supervisor
 
-Checked on **23 October 2026** after a clean dependency installation with Node.js 24.16.0. Code and regression-test revision: [`961d550`](https://github.com/haskallalk-eng/mindrails-supervisor/commit/961d550ee2db669b34f94e0a7c98157babe7fc2f). Later documentation commits do not change that tested code.
+Checked on **23 October 2026** with Node.js 24.16.0. The latest code and regression-test revision is [`b291496`](https://github.com/haskallalk-eng/mindrails-supervisor/commit/b291496b2bc098e19bfa33b18810043908a88161): TypeScript and the complete automated suite were rerun after the additional unreadable-file fix. The other checks below were completed after a clean dependency installation at [`961d550`](https://github.com/haskallalk-eng/mindrails-supervisor/commit/961d550ee2db669b34f94e0a7c98157babe7fc2f) and were not repeated for the storage-only follow-up. Later documentation commits do not change the tested code.
 
 | Check | Result |
 | --- | --- |
-| Build and automated tests (`npm test`) | 165 passed, 0 failed, 0 skipped |
+| Build and automated tests (`npm test`) | 167 passed, 0 failed, 0 skipped |
 | TypeScript (`npm run typecheck`) | Passed |
 | Offline demonstration (`npm run demo`) | Completed with the documented continue/finish/review decisions |
 | MCP transport (`npm run e2e`) | 12 scenarios passed, 0 failed |

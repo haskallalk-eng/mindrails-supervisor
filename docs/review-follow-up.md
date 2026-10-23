@@ -34,6 +34,13 @@ Invalid files are skipped with a visible warning; their contents remain intact.
 Saving a stale valid in-memory copy over a corrupt existing file is refused.
 Unknown metadata is retained for forward compatibility.
 
+A second review found that a directory named like a conversation JSON file, or
+a file read error, could still break the entire list. Non-regular entries and
+unreadable files now produce explicit warnings while healthy conversations stay
+available. Saving over either kind of entry is refused. Regression tests use an
+actual directory that produces `EISDIR` and a narrowly injected `EACCES` read
+error; the latter does not claim to reproduce every operating system's ACLs.
+
 - [Persistence boundary](../src/jev-app/store.ts)
 - [Malformed-record and preservation tests](../tests/jev-store.test.mjs)
 
@@ -46,8 +53,10 @@ uses stdio, so the update is dependency maintenance, not evidence that the
 published application was exploitable. Adding HTTP later requires its own
 transport-specific limits and review.
 
-The follow-up passed 165 automated tests with no failures or skips, TypeScript,
-the offline demo, 12 MCP scenarios, evidence generation, the live-suite dry-run
-and package preparation. See the [verification record](portfolio-validation.md).
+The latest storage follow-up passed 167 automated tests with no failures or skips
+and TypeScript. The preceding revision also passed the offline demo, 12 MCP
+scenarios, evidence generation, the live-suite dry-run and package preparation;
+those additional checks were not repeated for the storage-only follow-up.
+See the [verification record](portfolio-validation.md).
 Agent compatibility was exercised with synthetic CLI fixtures; no paid live
 agent run or production service was used.
