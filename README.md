@@ -61,14 +61,16 @@ The demo runs the implementation with explicit markers and supplied fixtures. It
 
 ## Verification
 
-[Reproduced locally on 22 October 2026](docs/portfolio-validation.md):
+[Reproduced locally on 23 October 2026](docs/portfolio-validation.md):
 
 | Check | Result |
 | --- | --- |
-| Build and automated tests | 133 passed |
+| Build and automated tests | 167 passed, 0 failed, 0 skipped |
 | TypeScript | Passed |
 | MCP transport scenarios | 12 passed |
 | Offline demo | Documented decisions reproduced |
+
+The complete test suite and TypeScript were rerun after the final storage fix. MCP scenarios and the offline demo were checked at the preceding code revision; the linked verification record identifies both commits and the scope of each check.
 
 ```sh
 npm test

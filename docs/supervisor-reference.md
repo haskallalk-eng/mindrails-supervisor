@@ -81,9 +81,9 @@ Details: [docs/model-routing.md](../docs/model-routing.md).
 
 ## Tests
 
-[Reproduced verification, 22 October 2026](../docs/portfolio-validation.md): 132 tests and 12 MCP scenarios passed locally; scope and limitations included.
+[Reproduced verification, 23 October 2026](../docs/portfolio-validation.md): 167 automated tests passed locally with no failures or skips. Twelve MCP scenarios passed at the preceding code revision; the linked record gives exact revisions, scope and limitations.
 
-132 automated tests (policy, hooks, plugins, the app with fake Claude and Codex binaries, real MCP transport) run on Ubuntu and Windows in CI. Live checks against the real services are documented in [`evidence/`](../evidence) and the [changelog](../CHANGELOG.md).
+The automated suite (policy, hooks, plugins, tool lifecycle, storage and the app with fake Claude and Codex binaries) runs on Ubuntu and Windows in CI. Live checks against the real services are documented in [`evidence/`](../evidence) and the [changelog](../CHANGELOG.md).
 
 ---
 
