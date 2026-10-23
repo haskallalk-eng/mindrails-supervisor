@@ -8,6 +8,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CodexAppServer, RpcError, isWriterConflict, resolveCodexBinary } from '../codex-app-server.js';
+import { ToolActivityLog, toolKind, formatActivity } from './activity.js';
 
 export type Approval = { kind: 'command' | 'fileChange' | 'tool'; title: string; detail: string | null };
 export type RunEvents = {
@@ -66,17 +67,22 @@ export class ClaudeRunner implements Runner {
     const child = this.child = spawn(binary!, args, { cwd: input.cwd, env: cleanClaudeEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let stderr = ''; child.stderr.on('data', d => { if (stderr.length < 4000) stderr += d; });
     const write = (msg: object) => { if (!child.stdin.destroyed) child.stdin.write(JSON.stringify(msg) + '\n'); };
-    const activity: string[] = []; let text = '', streamed = '', servedModel: string | null = null, result: any = null;
-    const note = (line: string) => { activity.push(line); ev.activity?.(line); };
+    this.stopped = false;
+    const toolActivity = new ToolActivityLog(ev.activity), activity = toolActivity.lines;
+    let text = '', streamed = '', servedModel: string | null = null, result: any = null;
 
     return new Promise<RunResult>(resolve => {
       createInterface({ input: child.stdout }).on('line', async line => {
         let m: any; try { m = JSON.parse(line); } catch { return; }
         if (m.type === 'control_request' && m.request?.subtype === 'can_use_tool') {
           const r = m.request, name = String(r.tool_name ?? 'Werkzeug'), inp = r.input ?? {};
-          const kind: Approval['kind'] = name === 'Bash' || name === 'PowerShell' ? 'command' : /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(name) ? 'fileChange' : 'tool';
-          const decision = await ev.approval({ kind, title: kind === 'command' ? `Befehl ausführen (${name})` : kind === 'fileChange' ? 'Datei ändern' : `Werkzeug „${name}“ benutzen`,
-            detail: short(inp.command ?? inp.file_path ?? inp.url ?? JSON.stringify(inp), 600) || null });
+          const kind = toolKind(name), toolId = typeof r.tool_use_id === 'string' ? r.tool_use_id : `permission:${m.request_id}`;
+          toolActivity.request(toolId, name, inp);
+          let decision: 'accept' | 'decline' = 'decline';
+          try { decision = await ev.approval({ kind, title: kind === 'command' ? `Befehl ausführen (${name})` : kind === 'fileChange' ? 'Datei ändern' : `Werkzeug „${name}“ benutzen`,
+            detail: short(inp.command ?? inp.file_path ?? inp.url ?? JSON.stringify(inp), 600) || null }); }
+          catch { ev.notice?.('Freigabe konnte nicht abgefragt werden; Werkzeug abgelehnt.'); }
+          toolActivity.update(toolId, decision === 'accept' ? 'allowed' : 'denied');
           write({ type: 'control_response', response: { subtype: 'success', request_id: m.request_id,
             response: decision === 'accept' ? { behavior: 'allow', updatedInput: inp } : { behavior: 'deny', message: 'Vom Nutzer in der Jev-App abgelehnt.' } } });
           return;
@@ -89,9 +95,13 @@ export class ClaudeRunner implements Runner {
           for (const b of m.message?.content ?? []) {
             if (b.type === 'text' && b.text) text += (text ? '\n\n' : '') + b.text;
             if (b.type === 'tool_use') {
-              const i = b.input ?? {};
-              note(b.name === 'Bash' || b.name === 'PowerShell' ? `ausgeführt: ${short(i.command)}` : /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name) ? `geändert: ${short(i.file_path ?? i.notebook_path)}` : `Werkzeug: ${b.name}`);
+              toolActivity.request(typeof b.id === 'string' ? b.id : `untracked:${activity.length}`, String(b.name ?? 'Werkzeug'), b.input ?? {});
             }
+          }
+        }
+        if (m.type === 'user' && !m.parent_tool_use_id && Array.isArray(m.message?.content)) {
+          for (const b of m.message.content) if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+            toolActivity.update(b.tool_use_id, b.is_error ? 'failed' : 'completed');
           }
         }
         if (m.type === 'result') { result = m; child.stdin.end(); }
@@ -136,9 +146,9 @@ export class CodexRunner implements Runner {
       else if (method === 'item/completed') {
         const item = p.item;
         if (item?.type === 'agentMessage') text += (text ? '\n\n' : '') + String(item.text ?? '');
-        else if (item?.type === 'commandExecution') note(`ausgeführt: ${short(item.command)}`);
-        else if (item?.type === 'fileChange') for (const c of item.changes ?? []) note(`geändert: ${short(c.path)}`);
-        else if (item?.type === 'mcpToolCall' || item?.type === 'dynamicToolCall') note(`Werkzeug: ${item.tool ?? item.name}`);
+        else if (item?.type === 'commandExecution') note(formatActivity('command', short(item.command), item.exitCode != null && item.exitCode !== 0 ? 'failed' : item.status));
+        else if (item?.type === 'fileChange') for (const c of item.changes ?? []) note(formatActivity('fileChange', short(c.path), item.status));
+        else if (item?.type === 'mcpToolCall' || item?.type === 'dynamicToolCall') note(formatActivity('tool', short(item.tool ?? item.name), item.status));
       } else if (method === 'turn/completed') done(p.turn);
       else if (method === 'error') ev.notice?.(`Codex: ${short(p?.error?.message ?? p?.message, 400)}`);
     };

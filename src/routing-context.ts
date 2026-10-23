@@ -36,12 +36,14 @@ function recentView(turn: HistoryTurn, index: number, cap: number) {
   const agent = turn.items.filter(i => i.type === 'agentMessage').map(i => (i as { text: string }).text).join('\n\n');
   const commands = turn.items.filter(i => i.type === 'command').map(i => i as Extract<HistoryItem, { type: 'command' }>);
   const failed = commands.filter(c => c.status === 'failed' || (c.exitCode ?? 0) !== 0);
-  const files = [...new Set(turn.items.flatMap(i => i.type === 'fileChange' ? i.paths : []))];
+  const files = [...new Set(turn.items.flatMap(i => i.type === 'fileChange' && i.status === 'completed' ? i.paths : []))];
+  const incompleteFiles = turn.items.flatMap(i => i.type === 'fileChange' && i.status !== 'completed' ? i.paths.map(path => ({ path, status: i.status })) : []);
   return {
     turn: index + 1, status: turn.status, ...(turn.error ? { error: clip(turn.error, 400) } : {}),
     user: clip(user, cap), assistant: clip(agent, cap),
     ...(commands.length ? { commands: commands.length, lastCommands: commands.slice(-5).map(c => ({ command: clip(c.command.replace(/\s+/g, ' '), 140), status: c.status })), failedCommands: failed.slice(-5).map(c => ({ command: clip(c.command, 160), exitCode: c.exitCode })) } : {}),
     ...(files.length ? { changedFiles: files.slice(0, 20) } : {}),
+    ...(incompleteFiles.length ? { fileChangesWithoutCompletion: incompleteFiles.slice(0, 20) } : {}),
   };
 }
 

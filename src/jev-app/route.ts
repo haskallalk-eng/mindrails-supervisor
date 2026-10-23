@@ -121,7 +121,7 @@ export function handover(c: Conversation, agent: AgentKind, text: string, budget
     if (dropped) parts.unshift(`(${dropped} ältere Nachrichten ausgelassen)`);
   }
   const intro = fresh
-    ? 'Jev-App, Übergabe: Du übernimmst ein laufendes Gespräch. Bisher haben andere KI-Agenten im selben Projektordner daran gearbeitet; ihre Änderungen liegen schon in den Dateien. Das ist der bisherige Verlauf:'
-    : 'Jev-App, Übergabe: Seit deiner letzten Antwort hat ein anderer KI-Agent im selben Projektordner weitergearbeitet; seine Änderungen liegen schon in den Dateien. Das ist inzwischen passiert:';
+    ? 'Jev-App, Übergabe: Du übernimmst ein laufendes Gespräch. Bisher haben andere KI-Agenten im selben Projektordner daran gearbeitet. Beachte den Werkzeugstatus: Anfragen und Freigaben belegen keine Ausführung; prüfe den aktuellen Dateistand. Das ist der bisherige Verlauf:'
+    : 'Jev-App, Übergabe: Seit deiner letzten Antwort hat ein anderer KI-Agent im selben Projektordner weitergearbeitet. Beachte den Werkzeugstatus: Anfragen und Freigaben belegen keine Ausführung; prüfe den aktuellen Dateistand. Das ist inzwischen passiert:';
   return { prompt: `${intro}\n\n<verlauf>\n${parts.join('\n\n')}\n</verlauf>\n\nNeue Nachricht des Nutzers:\n${text}`, carried: unseen.length };
 }

@@ -25,11 +25,30 @@ createInterface({ input: process.stdin }).on('line', line => {
     send({ type: 'assistant', message: { model, role: 'assistant', content: [{ type: 'text', text: answer }] }, parent_tool_use_id: null });
     send({ type: 'result', subtype: 'success', is_error: false, result: answer, session_id: session });
   };
-  if (text.includes('BEFEHL')) {
+  if (text === 'TOOL_PARALLEL') {
+    send({ type: 'assistant', message: { content: [
+      { type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } },
+      { type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'npm run build' } },
+    ] }, parent_tool_use_id: null });
+    for (const [id, error] of [['unrelated', false], ['t2', false], ['t1', true]]) {
+      send({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: error, content: 'synthetic tool result' }] }, parent_tool_use_id: null });
+    }
+    return finish();
+  }
+  if (text.includes('BEFEHL') || text.startsWith('TOOL_')) {
+    const name = text.includes('DATEI') ? 'Edit' : text.includes('GENERIC') ? 'WebFetch' : 'Bash';
+    const input = name === 'Edit' ? { file_path: 'src/parser.ts' } : name === 'Bash' ? { command: 'npm test' } : { url: 'https://example.test/' };
+    const toolUse = { type: 'assistant', message: { model, role: 'assistant', content: [{ type: 'tool_use', id: 't1', name, input }] }, parent_tool_use_id: null };
+    send(toolUse);
+    if (text.includes('REQUEST_ONLY')) return finish();
     waiting = r => {
-      send({ type: 'assistant', message: { model, role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] }, parent_tool_use_id: null });
+      if (text.includes('APPROVAL_ONLY')) return finish();
+      if (r.behavior === 'allow') log({ simulatedExecution: name });
+      send({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: r.behavior !== 'allow' || text.includes('FAILURE'), content: r.behavior === 'allow' ? 'synthetic tool result' : 'permission denied' }] }, parent_tool_use_id: null });
+      // Duplicate intent must not erase the result already observed.
+      send(toolUse);
       finish(` – Befehl ${r.behavior}`);
     };
-    send({ type: 'control_request', request_id: 'perm-1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'npm test' } } });
+    send({ type: 'control_request', request_id: 'perm-1', request: { subtype: 'can_use_tool', tool_use_id: 't1', tool_name: name, input } });
   } else finish();
 });

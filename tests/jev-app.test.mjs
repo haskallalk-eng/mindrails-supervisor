@@ -78,12 +78,91 @@ test('Claude runner: official CLI in stream-json mode with model, effort and ses
     { approval: async a => { asked.push(a); return 'decline'; } });
   assert.equal(r2.status, 'completed'); assert.match(r2.text, /Befehl deny$/);
   assert.deepEqual(asked, [{ kind: 'command', title: 'Befehl ausführen (Bash)', detail: 'npm test' }]);
-  assert.deepEqual(r2.activity, ['ausgeführt: npm test']);
+  assert.deepEqual(r2.activity, ['abgelehnt (Befehl): npm test']);
   const log = await readLog(process.env.FAKE_CLAUDE_LOG);
   const [a1, a2] = log.filter(e => e.args).map(e => e.args);
   assert.deepEqual([a1[a1.indexOf('--model') + 1], a1[a1.indexOf('--effort') + 1], a1[a1.indexOf('--session-id') + 1], a1[a1.indexOf('--permission-mode') + 1], a1[a1.indexOf('--permission-prompts') + 1]], ['claude-opus-5-5', 'medium', r1.sessionId, 'default', 'host']);
   assert.deepEqual([a2[a2.indexOf('--resume') + 1], a2[a2.indexOf('--permission-mode') + 1]], [r1.sessionId, 'acceptEdits']);
   assert.deepEqual(log.find(e => e.permission).permission, { behavior: 'deny', message: 'Vom Nutzer in der Jev-App abgelehnt.' });
+  assert.ok(!log.some(e => e.simulatedExecution), 'a denied tool is not executed even though its tool_use intent was emitted');
+});
+
+test('Claude activity and handover distinguish requests, permissions, results and failures', async (t) => {
+  const { ClaudeRunner } = await import('../dist/jev-app/runners.js');
+  const { handover } = await import('../dist/jev-app/route.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-tool-status-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const cases = [
+    ['REQUEST_ONLY', 'accept', 'angefragt, Ergebnis ausstehend (Befehl): npm test', 0],
+    ['APPROVAL_ONLY', 'accept', 'genehmigt, Ergebnis ausstehend (Befehl): npm test', 1],
+    ['SUCCESS', 'decline', 'abgelehnt (Befehl): npm test', 1],
+    ['FAILURE', 'accept', 'fehlgeschlagen (Befehl): npm test', 1],
+    ['SUCCESS', 'accept', 'ausgeführt: npm test', 1],
+    ['DATEI SUCCESS', 'decline', 'abgelehnt (Dateiänderung): src/parser.ts', 1],
+    ['DATEI FAILURE', 'accept', 'fehlgeschlagen (Dateiänderung): src/parser.ts', 1],
+    ['DATEI SUCCESS', 'accept', 'geändert: src/parser.ts', 1],
+    ['GENERIC SUCCESS', 'accept', 'Werkzeug abgeschlossen: WebFetch', 1],
+  ];
+  for (const [scenario, decision, expected, approvals] of cases) await t.test(`${scenario} / ${decision}`, async () => {
+    process.env.FAKE_CLAUDE_LOG = join(dir, `${scenario.replaceAll(' ', '-')}-${decision}.jsonl`);
+    const live = []; let asked = 0;
+    const result = await new ClaudeRunner([process.execPath, fakeClaude]).run({ cwd: dir, sessionId: null, prompt: `TOOL_${scenario}`, model: 'claude-opus-5-5', effort: 'medium', access: 'read' },
+      { activity: line => live.push(line), approval: async () => { asked++; assert.ok(live.every(line => !/^(ausgeführt|geändert):/.test(line)), 'permission is requested before any completion claim'); return decision; } });
+    assert.equal(result.status, 'completed'); assert.equal(asked, approvals);
+    assert.deepEqual(result.activity, [expected]);
+    assert.match(live[0], /^angefragt, Ergebnis ausstehend/);
+    assert.equal(live.at(-1), expected);
+    const prompt = handover({ agents: {}, messages: [{ role: 'assistant', agent: 'claude', model: 'claude-opus-5-5', text: result.text, activity: result.activity }] }, 'codex', 'weiter').prompt;
+    assert.ok(prompt.includes(expected));
+    assert.match(prompt, /Anfragen und Freigaben belegen keine Ausführung/);
+    if (!/^(ausgeführt|geändert|Werkzeug abgeschlossen):/.test(expected)) assert.doesNotMatch(prompt, /\((ausgeführt|geändert|Werkzeug abgeschlossen):/);
+  });
+});
+
+test('Claude approval callback failure denies the tool and leaves no completion claim', async (t) => {
+  const { ClaudeRunner } = await import('../dist/jev-app/runners.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-approval-error-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  process.env.FAKE_CLAUDE_LOG = join(dir, 'log.jsonl'); const notices = [];
+  const result = await new ClaudeRunner([process.execPath, fakeClaude]).run({ cwd: dir, sessionId: null, prompt: 'BEFEHL', model: 'claude-opus-5-5', effort: null, access: 'read' },
+    { notice: n => notices.push(n), approval: async () => { throw new Error('window closed'); } });
+  assert.deepEqual(result.activity, ['abgelehnt (Befehl): npm test']);
+  assert.equal(notices.length, 1);
+  assert.ok(!(await readLog(process.env.FAKE_CLAUDE_LOG)).some(e => e.simulatedExecution));
+});
+
+test('Claude matches out-of-order results to tool ids, including tools that need no approval', async (t) => {
+  const { ClaudeRunner } = await import('../dist/jev-app/runners.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-tool-ids-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  process.env.FAKE_CLAUDE_LOG = join(dir, 'log.jsonl');
+  const result = await new ClaudeRunner([process.execPath, fakeClaude]).run({ cwd: dir, sessionId: null, prompt: 'TOOL_PARALLEL', model: 'claude-opus-5-5', effort: null, access: 'read' },
+    { approval: async () => { assert.fail('this fixture has already permitted tools'); } });
+  assert.deepEqual(result.activity, ['fehlgeschlagen (Befehl): npm test', 'ausgeführt: npm run build']);
+});
+
+test('imported tools preserve incomplete and failed states, including tools after the last answer', async () => {
+  const { turnsToMessages } = await import('../dist/jev-app/app.js');
+  const messages = turnsToMessages([{ id: 't', status: 'completed', items: [
+    { type: 'command', command: 'npm test', status: 'failed', exitCode: 1 },
+    { type: 'fileChange', paths: ['pending.ts'], status: 'requested' },
+    { type: 'agentMessage', text: 'Antwort' },
+    { type: 'fileChange', paths: ['done.ts'], status: 'completed' },
+    { type: 'tool', name: 'Read', status: 'unknown' },
+  ] }], 'claude');
+  assert.deepEqual(messages[0].activity, ['fehlgeschlagen (Befehl): npm test', 'angefragt, Ergebnis ausstehend (Dateiänderung): pending.ts']);
+  assert.equal(messages[1].role, 'note');
+  assert.deepEqual(messages[1].activity, ['geändert: done.ts', 'Ergebnis unbekannt (Werkzeug): Read']);
+});
+
+test('a failed run with no text still persists tool evidence for the next agent', async (t) => {
+  const { JevAppEngine } = await import('../dist/jev-app/app.js');
+  const { handover } = await import('../dist/jev-app/route.js');
+  const dir = await mkdtemp(join(tmpdir(), 'jev-failed-evidence-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const engine = new JevAppEngine({ stateDir: dir, available: () => ({ claude: true, codex: true }), catalog: () => catalog,
+    runner: () => ({ interrupt() {}, run: async () => ({ sessionId: 's', text: '', activity: ['fehlgeschlagen (Befehl): npm test'], status: 'failed', error: 'process exited', servedModel: null }) }) }, () => {});
+  const c = engine.store.create({ cwd: dir });
+  await engine.send(c.id, 'Tests ausführen', { model: 'claude-opus-5-5' });
+  const saved = engine.store.get(c.id);
+  assert.deepEqual(saved.messages.find(m => m.role === 'assistant').activity, ['fehlgeschlagen (Befehl): npm test']);
+  assert.match(handover(saved, 'codex', 'weiter').prompt, /fehlgeschlagen \(Befehl\): npm test/);
 });
 
 test('Jev app: one conversation switches from Claude to Codex and back; each agent gets what it has not seen; approvals come from the window', async (t) => {

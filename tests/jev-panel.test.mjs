@@ -18,6 +18,16 @@ test('short history is sent completely and labeled as complete', () => {
   assert.match(describeContext(stats), /Vollständiger sichtbarer Verlauf \(2 Turns/);
 });
 
+test('routing evidence only calls a file changed after a completed tool result', () => {
+  const { context } = buildRoutingContext([turn(1, 'Edit files', 'Done', [
+    { type: 'fileChange', paths: ['done.ts'], status: 'completed' },
+    { type: 'fileChange', paths: ['requested.ts'], status: 'requested' },
+    { type: 'fileChange', paths: ['failed.ts'], status: 'failed' },
+  ])]);
+  assert.deepEqual(context.turns[0].changedFiles, ['done.ts']);
+  assert.deepEqual(context.turns[0].fileChangesWithoutCompletion, [{ path: 'requested.ts', status: 'requested' }, { path: 'failed.ts', status: 'failed' }]);
+});
+
 test('long history (~5 MB) becomes a labeled selection that keeps recent work, constraints, decisions and problems', async () => {
   const filler = 'Details zur Umsetzung ohne besondere Bedeutung. '.repeat(400);
   const turns = [turn(1, 'Ursprünglicher Auftrag: Baue den Jev-Router für Codex.')];
@@ -179,6 +189,7 @@ test('Claude Code transcripts become visible turns without thinking, meta or sid
   assert.equal(turns[0].items[0].text, 'Baue den Parser. Du darfst niemals die Datenbank löschen.');
   assert.deepEqual(turns[0].items.slice(1).map(i => i.type), ['agentMessage', 'command', 'fileChange', 'agentMessage']);
   assert.equal(turns[0].items[2].status, 'failed');
+  assert.equal(turns[0].items[3].status, 'requested', 'an Edit tool_use with no matching result is not a completed file change');
   const all = JSON.stringify(turns); assert.ok(!all.includes('geheim') && !all.includes('Nebenagent') && !all.includes('meta') && !all.includes('intern'));
   const [listed] = listClaudeSessions(root); assert.equal(listed.title, 'Parser bauen'); assert.equal(listed.cwd, 'C:/proj');
   assert.equal(findClaudeSession('../../etc/passwd', root), null);

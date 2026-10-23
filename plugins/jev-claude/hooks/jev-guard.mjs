@@ -21262,7 +21262,8 @@ function recentView(turn, index, cap) {
   const agent = turn.items.filter((i) => i.type === "agentMessage").map((i) => i.text).join("\n\n");
   const commands = turn.items.filter((i) => i.type === "command").map((i) => i);
   const failed = commands.filter((c) => c.status === "failed" || (c.exitCode ?? 0) !== 0);
-  const files = [...new Set(turn.items.flatMap((i) => i.type === "fileChange" ? i.paths : []))];
+  const files = [...new Set(turn.items.flatMap((i) => i.type === "fileChange" && i.status === "completed" ? i.paths : []))];
+  const incompleteFiles = turn.items.flatMap((i) => i.type === "fileChange" && i.status !== "completed" ? i.paths.map((path) => ({ path, status: i.status })) : []);
   return {
     turn: index + 1,
     status: turn.status,
@@ -21270,7 +21271,8 @@ function recentView(turn, index, cap) {
     user: clip(user, cap),
     assistant: clip(agent, cap),
     ...commands.length ? { commands: commands.length, lastCommands: commands.slice(-5).map((c) => ({ command: clip(c.command.replace(/\s+/g, " "), 140), status: c.status })), failedCommands: failed.slice(-5).map((c) => ({ command: clip(c.command, 160), exitCode: c.exitCode })) } : {},
-    ...files.length ? { changedFiles: files.slice(0, 20) } : {}
+    ...files.length ? { changedFiles: files.slice(0, 20) } : {},
+    ...incompleteFiles.length ? { fileChangesWithoutCompletion: incompleteFiles.slice(0, 20) } : {}
   };
 }
 function extractNotes(turn, index) {
@@ -21484,9 +21486,9 @@ function readClaudeSession(path) {
       if (Array.isArray(content)) {
         for (const b of content) if (b?.type === "tool_result") {
           const item = byToolId.get(b.tool_use_id);
-          if (item && item.type === "command") {
+          if (item && (item.type === "command" || item.type === "fileChange" || item.type === "tool")) {
             item.status = b.is_error ? "failed" : "completed";
-            item.exitCode = b.is_error ? 1 : 0;
+            if (item.type === "command") item.exitCode = b.is_error ? 1 : 0;
           }
         }
       }
@@ -21504,8 +21506,8 @@ function readClaudeSession(path) {
         const input2 = b.input ?? {};
         let item;
         if (typeof input2.command === "string") item = { type: "command", command: input2.command, exitCode: null, status: "unknown" };
-        else if (typeof input2.file_path === "string" && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name)) item = { type: "fileChange", paths: [input2.file_path], status: "completed" };
-        else item = { type: "tool", name: String(b.name), status: "called" };
+        else if (typeof (input2.file_path ?? input2.notebook_path) === "string" && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name)) item = { type: "fileChange", paths: [input2.file_path ?? input2.notebook_path], status: "requested" };
+        else item = { type: "tool", name: String(b.name), status: "requested" };
         byToolId.set(b.id, item);
         current.items.push(item);
       }

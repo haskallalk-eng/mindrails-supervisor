@@ -19,6 +19,7 @@ import { ConversationStore, isId, type AgentKind, type Conversation, type Messag
 import { agentOf, candidates, chooseRoute, handover, labelOf, offeredEfforts, type Availability } from './route.js';
 import { ClaudeRunner, CodexRunner, claudeReady, codexReady, type Approval, type Runner } from './runners.js';
 import { APP_HTML } from './ui.js';
+import { formatActivity } from './activity.js';
 
 export type AppEvent = { type: string; conversationId?: string; [k: string]: unknown };
 export type AppOptions = {
@@ -37,10 +38,11 @@ export function turnsToMessages(turns: HistoryTurn[], agent: AgentKind): Omit<Me
     for (const i of t.items) {
       if (i.type === 'userMessage') out.push({ role: 'user', text: i.text });
       else if (i.type === 'agentMessage') { out.push({ role: 'assistant', agent, text: i.text, activity: activity.length ? activity : undefined }); activity = []; }
-      else if (i.type === 'command') activity.push(`ausgeführt: ${i.command.slice(0, 200)}`);
-      else if (i.type === 'fileChange') activity.push(...i.paths.map(p => `geändert: ${p}`));
-      else if (i.type === 'tool') activity.push(`Werkzeug: ${i.name}`);
+      else if (i.type === 'command') activity.push(formatActivity('command', i.command.slice(0, 200), i.exitCode != null && i.exitCode !== 0 ? 'failed' : i.status));
+      else if (i.type === 'fileChange') activity.push(...i.paths.map(p => formatActivity('fileChange', p, i.status)));
+      else if (i.type === 'tool') activity.push(formatActivity('tool', i.name, i.status));
     }
+    if (activity.length) out.push({ role: 'note', text: 'Werkzeugstatus aus dem importierten Verlauf.', activity });
   }
   return out;
 }
@@ -93,7 +95,7 @@ export class JevAppEngine {
         }),
       });
       const fresh = this.store.get(id) ?? c;
-      if (result.text || result.status === 'completed') {
+      if (result.text || result.activity.length || result.status === 'completed') {
         const msg = this.store.add(fresh, { role: 'assistant', agent: route.agent, model: result.servedModel ?? route.model, effort: route.effort, text: result.text || '(keine Textantwort)', activity: result.activity.length ? result.activity : undefined });
         emit({ type: 'assistant', message: msg });
       }
@@ -163,7 +165,7 @@ export async function startApp(o: AppOptions): Promise<{ server: Server; url: st
         const av = url.searchParams.get('refresh') || !availability ? checkAvailability() : availability;
         const catalog = engine.catalog();
         const models = candidates(av, catalog).map(m => ({ id: m, label: labelOf(m), agent: agentOf(m), efforts: offeredEfforts(m, catalog) }));
-        return json(res, 200, { available: av, conversations: engine.store.list().map(c => ({ ...c, busy: engine.isBusy(c.id) })), models, defaultCwd: o.defaultCwd ?? homedir() });
+        return json(res, 200, { available: av, conversations: engine.store.list().map(c => ({ ...c, busy: engine.isBusy(c.id) })), conversationProblems: engine.store.getProblems(), models, defaultCwd: o.defaultCwd ?? homedir() });
       }
       if (req.method === 'GET' && url.pathname === '/api/conversation') {
         const id = url.searchParams.get('id'); const c = isId(id) ? engine.store.get(id) : null;

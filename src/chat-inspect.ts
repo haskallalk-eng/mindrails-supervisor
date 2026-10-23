@@ -163,7 +163,13 @@ export function readClaudeSession(path: string): HistoryTurn[] {
     if (o.isSidechain || (o.type !== 'user' && o.type !== 'assistant')) continue;
     const content = o.message?.content;
     if (o.type === 'user') {
-      if (Array.isArray(content)) for (const b of content) if (b?.type === 'tool_result') { const item = byToolId.get(b.tool_use_id); if (item && item.type === 'command') { item.status = b.is_error ? 'failed' : 'completed'; item.exitCode = b.is_error ? 1 : 0; } }
+      if (Array.isArray(content)) for (const b of content) if (b?.type === 'tool_result') {
+        const item = byToolId.get(b.tool_use_id);
+        if (item && (item.type === 'command' || item.type === 'fileChange' || item.type === 'tool')) {
+          item.status = b.is_error ? 'failed' : 'completed';
+          if (item.type === 'command') item.exitCode = b.is_error ? 1 : 0;
+        }
+      }
       const text = o.isMeta ? '' : userText(content);
       if (text) { current = { id: String(o.uuid ?? turns.length), status: 'completed', items: [{ type: 'userMessage', text }] }; turns.push(current); }
       continue;
@@ -175,8 +181,8 @@ export function readClaudeSession(path: string): HistoryTurn[] {
         const input = b.input ?? {};
         let item: HistoryItem;
         if (typeof input.command === 'string') item = { type: 'command', command: input.command, exitCode: null, status: 'unknown' };
-        else if (typeof input.file_path === 'string' && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name)) item = { type: 'fileChange', paths: [input.file_path], status: 'completed' };
-        else item = { type: 'tool', name: String(b.name), status: 'called' };
+        else if (typeof (input.file_path ?? input.notebook_path) === 'string' && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name)) item = { type: 'fileChange', paths: [input.file_path ?? input.notebook_path], status: 'requested' };
+        else item = { type: 'tool', name: String(b.name), status: 'requested' };
         byToolId.set(b.id, item); current.items.push(item);
       }
     }
