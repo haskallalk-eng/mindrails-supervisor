@@ -13,9 +13,9 @@ MindRails Supervisor brings together a model-advice plugin, a local chat app and
 
 ## Project status
 
-**Finished preview, October 2026.** Complete as published and shared as a working reference, with no active development roadmap. Issues and pull requests are welcome.
+**Working preview, October 2026.** The published features are available to try; there is no roadmap for additional features. Maintenance fixes, issues and pull requests are welcome.
 
-The tools advise the host; they do not grant permissions or independently establish that a task succeeded. Plugins recommend model changes. The separate Jev app can select models when it starts agent runs itself.
+Plugins recommend model changes; the Jev app can select models when starting its own agent runs. Completion checks advise the host based on the task and evidence supplied.
 
 ## What's inside
 
@@ -48,7 +48,7 @@ SYNTHETIC MOCK DEMO — no API call, no semantic evaluation
 changed result → CONTINUE
 ```
 
-The demo runs the implementation with explicit markers and supplied fixtures. It demonstrates policy mechanics, **not model accuracy**.
+The demo uses explicit markers to exercise the decision rules. It makes no model calls.
 
 [Follow the walkthrough](docs/offline-walkthrough.md) to inspect an input, read its JSON result and trace the decision back to the source.
 
@@ -59,18 +59,7 @@ The demo runs the implementation with explicit markers and supplied fixtures. It
 - **Integrate an MCP host:** see [tool contracts](docs/supervisor-reference.md#mcp-tools) and [MCP configuration](docs/supervisor-reference.md#mcp-setup).
 - **Review the implementation:** start with [architecture](docs/architecture.md), [routing policy](docs/model-routing.md) and [evidence methodology](docs/evidence.md).
 
-## Verification
-
-[Reproduced locally on 23 October 2026](docs/portfolio-validation.md):
-
-| Check | Result |
-| --- | --- |
-| Build and automated tests | 167 passed, 0 failed, 0 skipped |
-| TypeScript | Passed |
-| MCP transport scenarios | 12 passed |
-| Offline demo | Documented decisions reproduced |
-
-The complete test suite and TypeScript were rerun after the final storage fix. MCP scenarios and the offline demo were checked at the preceding code revision; the linked verification record identifies both commits and the scope of each check.
+## Development and tests
 
 ```sh
 npm test
@@ -79,16 +68,15 @@ npm run demo
 npm run e2e
 ```
 
-These checks use synthetic fixtures; app tests use stand-in agent processes. They do not establish production accuracy, cost savings or a live end-to-end test of both coding agents. Separate provider experiments and their limits are documented in the [technical reference](docs/supervisor-reference.md#optional-jev-mode-byok).
+Tests cover completion decisions, input validation, conversation storage, CLI behavior and MCP transport. They use synthetic fixtures and stand-in agent processes. [Recorded test runs](docs/portfolio-validation.md) identify the tested revisions; [provider experiments](docs/supervisor-reference.md#optional-jev-mode-byok) are separate.
 
-## Data handling and limits
+## Data and provider use
 
-- The offline demo makes no model calls. Jev mode sends selected task, result or conversation content to the configured provider and can incur charges.
-- The Jev app stores conversations locally; the assessment server and local monitoring have different storage behavior. See [security and privacy](SECURITY.md).
-- Model advice uses documented benchmark and community-evidence snapshots. It is not a guarantee of the best model for every task.
-- Completion decisions depend on supplied evidence. The host remains responsible for verification, permissions and execution.
+The offline demo needs no credentials. Jev mode sends the supplied task or conversation content to your configured provider and can incur charges. The local app stores conversations on disk. See [security and privacy](SECURITY.md) for the different storage paths.
 
-[Full setup, commands, limits and evaluation details](docs/supervisor-reference.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+Model advice is based on benchmark and community-evidence snapshots. Check recommendations against your own workload; the host remains responsible for permissions and execution.
+
+[Full setup and commands](docs/supervisor-reference.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 ## License
 
