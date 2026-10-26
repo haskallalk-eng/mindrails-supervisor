@@ -3,7 +3,7 @@
 [Project overview and offline demo](../README.md)
 
 [![CI](https://github.com/haskallalk-eng/mindrails-supervisor/actions/workflows/ci.yml/badge.svg)](https://github.com/haskallalk-eng/mindrails-supervisor/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](../LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A524-339933)
 
 **Pick the right AI model and effort before an agent starts working – for Claude Code and Codex.**

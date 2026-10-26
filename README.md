@@ -5,11 +5,13 @@
 
 **Model advice and task checks for Claude Code, Codex and MCP hosts — a project by MindRails.**
 
-MindRails Supervisor brings together a model-advice plugin, a local chat app and an MCP server for completion checks and repeat-loop detection. The optional model-backed checks use [Jev](https://typesafe.ai); the offline demo works without an account or API key.
+MindRails Supervisor makes model advice, completion checks and repeated steps inspectable when working with coding agents. It combines plugins, a local chat app and MCP tools. Checks evaluate the requirements and evidence supplied by the host. Optional model-backed checks use [Jev](https://typesafe.ai); the offline demo works without an account or API key.
+
+**My contribution:** I, Hassieb Kalla, developed the project with AI assistance, connecting model-advice plugins, a local agent app and MCP tools. The implementation includes shared provider configuration, input validation and tests for the decision paths. See [source and dependency provenance](docs/provenance.md).
 
 [Offline demo](#try-the-free-offline-demo) · [Schritt-für-Schritt-Demo](docs/offline-walkthrough.md) · [Setup and technical reference](docs/supervisor-reference.md) · [Verification](docs/portfolio-validation.md) · [Hassieb Kalla's portfolio](https://github.com/haskallalk-eng)
 
-**Deutsch:** Ein Projekt von **MindRails** für die Arbeit mit Coding-Agenten: passende Modelle vorschlagen, Aufgaben anhand vorgegebener Kriterien prüfen und wiederholte Arbeitsschritte erkennen. Die Offline-Demo unten zeigt die Entscheidungslogik anhand synthetischer Beispiele.
+**Deutsch:** Ein Entwicklungsprojekt von **Hassieb Kalla / MindRails**: Modellvorschläge und Aufgabenprüfungen für Coding-Agenten nachvollziehbar machen. Ich habe Plugins, lokale App und MCP-Werkzeuge mit KI-Unterstützung entwickelt und verbunden. Die Offline-Demo zeigt die Entscheidungslogik mit synthetischen Beispielen.
 
 ## Project status
 
